@@ -1,0 +1,332 @@
+{
+  "status": "draft",
+  "brief": {
+    "goal": "Design a governed workspace flow for isolated child agents",
+    "domain_label": "Research And Development",
+    "owner": "Adam Goodwin",
+    "constraints": "Keep approvals explicit",
+    "success_definition": "Create a governed child workspace, keep scope narrow, produce reusable artifacts, and avoid granting more permissions than the goal requires."
+  },
+  "spec": {
+    "mission_name": "Workspace Design Lab",
+    "domain": "research-and-development",
+    "priority": "deep",
+    "success_definition": "Create a governed child workspace, keep scope narrow, produce reusable artifacts, and avoid granting more permissions than the goal requires.",
+    "requested_connectors": [
+      "openai"
+    ],
+    "child": {
+      "name": "Workspace Design Lab",
+      "slug": "workspace-design-lab",
+      "path": "/home/adamgoodwin/code/agents/Governed Agent Lab/children/workspace-design-lab",
+      "goal_path": "/home/adamgoodwin/code/agents/Governed Agent Lab/children/workspace-design-lab/workspace/goal.md",
+      "approved_boundary": "sandbox-only A2",
+      "requested_connectors": [
+        "openai"
+      ],
+      "recommended_roles": [
+        "planner",
+        "research",
+        "review",
+        "reporting"
+      ]
+    }
+  },
+  "phases": [
+    {
+      "id": "intake",
+      "title": "Clarify the mission",
+      "status": "complete",
+      "summary": "The boss agent has captured the goal, owner, constraints, and requested connectors."
+    },
+    {
+      "id": "child-bootstrap",
+      "title": "Create governed child workspace",
+      "status": "complete",
+      "summary": "Workspace created at /home/adamgoodwin/code/agents/Governed Agent Lab/children/workspace-design-lab."
+    },
+    {
+      "id": "approval-gate",
+      "title": "Collect approvals",
+      "status": "active",
+      "summary": "The child waits here until connector and tool-scope reviews are complete."
+    },
+    {
+      "id": "execution",
+      "title": "Run in the child workspace",
+      "status": "pending",
+      "summary": "The child will carry out its assigned work only after the approval gate is cleared."
+    },
+    {
+      "id": "review",
+      "title": "Review outputs",
+      "status": "pending",
+      "summary": "Artifacts return to the boss agent for summary, handoff, and archive."
+    }
+  ],
+  "orchestration": {
+    "goal": "Design a governed workspace flow for isolated child agents",
+    "domain_label": "Research And Development",
+    "roles": [
+      {
+        "role": "planner",
+        "purpose": "Decompose the goal and assign work to specialist roles.",
+        "workspace_focus": "Translate the user goal into a narrow governed execution brief.",
+        "outputs": [
+          "research questions",
+          "data requirements",
+          "strategy-search criteria",
+          "review gates"
+        ],
+        "artifact": "mission-brief",
+        "status": "complete"
+      },
+      {
+        "role": "research",
+        "purpose": "Gather prior art, regime context, and candidate hypotheses.",
+        "workspace_focus": "Investigate the goal 'Design a governed workspace flow for isolated child agents' using approved read-only inputs.",
+        "outputs": [
+          "market structure brief",
+          "strategy families",
+          "evidence and caveats"
+        ],
+        "artifact": "research-brief",
+        "status": "ready"
+      },
+      {
+        "role": "data",
+        "purpose": "Prepare large historical datasets, features, and validation slices.",
+        "workspace_focus": "Shape governed datasets and validation windows for the child workspace.",
+        "outputs": [
+          "cleaned datasets",
+          "feature candidates",
+          "train and validation splits"
+        ],
+        "artifact": "data-spec",
+        "status": "ready"
+      },
+      {
+        "role": "strategy",
+        "purpose": "Generate parameterized strategy candidates with money management assumptions.",
+        "workspace_focus": "Keep candidate logic simple, reproducible, and comparable.",
+        "outputs": [
+          "entry and exit rules",
+          "position sizing rules",
+          "fee and slippage assumptions"
+        ],
+        "artifact": "strategy-spec",
+        "status": "ready"
+      },
+      {
+        "role": "backtest",
+        "purpose": "Run iterative simulations across many parameter combinations.",
+        "workspace_focus": "Execute bounded experiments and preserve reproducible run artifacts.",
+        "outputs": [
+          "performance metrics",
+          "drawdown and equity curves",
+          "ranked candidate runs"
+        ],
+        "artifact": "backtest-report",
+        "status": "ready"
+      },
+      {
+        "role": "risk",
+        "purpose": "Attempt to break candidate strategies by stress, drawdown, and exposure analysis.",
+        "workspace_focus": "Search for hidden downside before any promotion step.",
+        "outputs": [
+          "risk findings",
+          "reasons to reject",
+          "required safeguards"
+        ],
+        "artifact": "risk-review",
+        "status": "gatekeeper"
+      },
+      {
+        "role": "review",
+        "purpose": "Challenge assumptions, look for leakage, overfitting, and bad methodology.",
+        "workspace_focus": "Force a second pass on method quality and leakage risk.",
+        "outputs": [
+          "review notes",
+          "bias and leakage checks",
+          "recommended retests"
+        ],
+        "artifact": "review-notes",
+        "status": "gatekeeper"
+      },
+      {
+        "role": "reporting",
+        "purpose": "Turn winning candidates into charts, rankings, and decision-ready summaries.",
+        "workspace_focus": "Package artifacts so the parent can summarize the mission clearly.",
+        "outputs": [
+          "trend charts",
+          "equity curves",
+          "ranked strategy recommendations"
+        ],
+        "artifact": "mission-summary",
+        "status": "ready"
+      },
+      {
+        "role": "paper_trade",
+        "purpose": "Monitor approved candidates in simulated execution before any real deployment.",
+        "workspace_focus": "Remain isolated until governance explicitly permits paper execution.",
+        "outputs": [
+          "paper trade logs",
+          "live-like drift checks",
+          "kill switch criteria"
+        ],
+        "artifact": "paper-trade-log",
+        "status": "isolated"
+      },
+      {
+        "role": "deployment",
+        "purpose": "Separate future runtime for paper trading and, later, approved live execution.",
+        "workspace_focus": "Stay dormant under current sandbox-only governance.",
+        "outputs": [
+          "deployment manifests",
+          "monitoring hooks",
+          "rollback controls"
+        ],
+        "artifact": "deployment-pack",
+        "status": "isolated",
+        "blocked_actions": [
+          "unsafe external writes",
+          "credential misuse",
+          "production deployment without review"
+        ]
+      }
+    ],
+    "handoffs": [
+      {
+        "from": "planner",
+        "to": "research",
+        "artifact": "research-brief"
+      },
+      {
+        "from": "planner",
+        "to": "data",
+        "artifact": "data-spec"
+      },
+      {
+        "from": "research",
+        "to": "strategy",
+        "artifact": "hypothesis-set"
+      },
+      {
+        "from": "data",
+        "to": "backtest",
+        "artifact": "clean-dataset-bundle"
+      },
+      {
+        "from": "strategy",
+        "to": "backtest",
+        "artifact": "strategy-specs"
+      },
+      {
+        "from": "backtest",
+        "to": "risk",
+        "artifact": "ranked-backtest-results"
+      },
+      {
+        "from": "backtest",
+        "to": "review",
+        "artifact": "methodology-bundle"
+      },
+      {
+        "from": "risk",
+        "to": "reporting",
+        "artifact": "risk-findings"
+      },
+      {
+        "from": "review",
+        "to": "reporting",
+        "artifact": "review-findings"
+      },
+      {
+        "from": "reporting",
+        "to": "paper_trade",
+        "artifact": "approved-paper-trade-candidate"
+      },
+      {
+        "from": "paper_trade",
+        "to": "deployment",
+        "artifact": "paper-trade-promotion-package"
+      }
+    ],
+    "gates": [
+      {
+        "gate": "research-to-backtest",
+        "requires": [
+          "clear hypothesis",
+          "clean dataset",
+          "fee assumptions"
+        ],
+        "human_approval_required": false
+      },
+      {
+        "gate": "backtest-to-review",
+        "requires": [
+          "performance metrics",
+          "drawdown metrics",
+          "reproducible config"
+        ],
+        "human_approval_required": false
+      },
+      {
+        "gate": "review-to-paper-trade",
+        "requires": [
+          "risk",
+          "review",
+          "human signoff"
+        ],
+        "human_approval_required": true
+      },
+      {
+        "gate": "paper-trade-to-deployment",
+        "requires": [
+          "paper_trade",
+          "deployment",
+          "governance reclassification before live use"
+        ],
+        "human_approval_required": true
+      }
+    ],
+    "separation_rules": [
+      "The strategy-producing roles do not deploy.",
+      "The deployment role cannot change strategy logic.",
+      "Review and risk roles challenge rather than approve by default.",
+      "Paper trading is required before any future live promotion."
+    ]
+  },
+  "governance": {
+    "autonomy_level": "A2",
+    "boundary": "sandbox-only",
+    "human_review_required_for": [
+      "new connectors",
+      "new secrets",
+      "paid APIs",
+      "external writes",
+      "live execution proposals"
+    ]
+  },
+  "child": {
+    "name": "Workspace Design Lab",
+    "slug": "workspace-design-lab",
+    "path": "/home/adamgoodwin/code/agents/Governed Agent Lab/children/workspace-design-lab",
+    "goal_path": "/home/adamgoodwin/code/agents/Governed Agent Lab/children/workspace-design-lab/workspace/goal.md",
+    "approved_boundary": "sandbox-only A2",
+    "requested_connectors": [
+      "openai"
+    ],
+    "recommended_roles": [
+      "planner",
+      "research",
+      "review",
+      "reporting"
+    ]
+  },
+  "next_actions": [
+    "Review the mission brief.",
+    "Approve or hold requested connectors.",
+    "Open the child workspace and begin execution after approvals clear."
+  ]
+}

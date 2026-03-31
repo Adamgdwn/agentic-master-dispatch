@@ -1,0 +1,27 @@
+[[connector]]
+key = "openai"
+enabled = false
+mode = "api"
+access = "narrow"
+notes = "Enable only if this child truly needs it."
+
+[[connector]]
+key = "perplexity"
+enabled = false
+mode = "api"
+access = "read-only"
+notes = "Enable for external research only."
+
+[[connector]]
+key = "genspark_bridge"
+enabled = false
+mode = "bridge"
+access = "narrow"
+notes = "Prefer a local bridge token over raw login access."
+
+[[connector]]
+key = "sqlite_readonly"
+enabled = false
+mode = "local"
+access = "read-only"
+notes = "Use approved research snapshots only."

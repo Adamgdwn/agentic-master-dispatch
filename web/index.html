@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Governed Agent Lab</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="brand-block panel">
+          <p class="eyebrow">Boss Agent</p>
+          <h1>Governed Agent Lab</h1>
+          <p class="lede">
+            Turn goals into governed child workspaces with explicit approvals, narrow permissions, and a clear sandbox boundary.
+          </p>
+          <div class="launcher-chip">
+            <span>Launcher</span>
+            <strong id="launcher-name">GovernedAgentLab.command</strong>
+          </div>
+          <small id="launcher-path" class="muted"></small>
+        </div>
+
+        <section class="panel">
+          <div class="section-head">
+            <h2>Overview</h2>
+            <span id="scope-badge" class="badge">A2</span>
+          </div>
+          <div id="overview-grid" class="overview-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <h2>Pending Approvals</h2>
+            <span id="approval-count" class="badge subtle">0</span>
+          </div>
+          <div id="approval-queue" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <h2>Connector Readiness</h2>
+            <button id="reload-env" type="button" class="ghost-button">Reload Env</button>
+          </div>
+          <p id="env-status" class="muted inline-note"></p>
+          <div id="connector-list" class="stack compact-stack"></div>
+        </section>
+      </aside>
+
+      <main class="main-stage">
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Mission Control</p>
+            <h2>Tell the boss what you want done.</h2>
+            <p>
+              The parent agent will open a governed mission, create a dedicated child folder, hold for approvals when needed, and keep the work separate from every other request.
+            </p>
+          </div>
+
+          <section class="panel intake-panel">
+            <div class="section-head">
+              <h2>Create Mission</h2>
+              <span class="badge subtle">Clean intake</span>
+            </div>
+            <form id="mission-form" class="intake-form">
+              <label>
+                Goal
+                <textarea
+                  id="goal"
+                  rows="5"
+                  placeholder="Example: Research a compact note-taking workflow, create a governed child workspace, and return a recommendation with implementation options."
+                ></textarea>
+              </label>
+
+              <div class="form-grid">
+                <label>
+                  Mission Name
+                  <input id="mission-name" type="text" placeholder="Optional custom mission name" />
+                </label>
+                <label>
+                  Domain
+                  <select id="domain">
+                    <option value="research-and-development">Research And Development</option>
+                    <option value="trading-strategy">Trading Strategy</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label>
+                  Owner
+                  <input id="owner" type="text" placeholder="Optional owner name" />
+                </label>
+                <label>
+                  Priority
+                  <select id="priority">
+                    <option value="balanced">Balanced</option>
+                    <option value="lean">Lean</option>
+                    <option value="deep">Deep</option>
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                Constraints
+                <input id="constraints" type="text" placeholder="Keep it sandboxed, evidence-backed, and narrow." />
+              </label>
+
+              <fieldset class="connector-fieldset">
+                <legend>Requested Connectors</legend>
+                <div id="connector-options" class="connector-options"></div>
+              </fieldset>
+
+              <div class="form-actions">
+                <button type="submit" class="primary-button">Create Governed Mission</button>
+                <p id="mission-status" class="muted inline-note"></p>
+              </div>
+            </form>
+          </section>
+        </section>
+
+        <section class="workspace-grid">
+          <section class="panel">
+            <div class="section-head">
+              <h2>Mission Queue</h2>
+              <span id="mission-count" class="badge subtle">0</span>
+            </div>
+            <div id="mission-list" class="stack mission-list"></div>
+          </section>
+
+          <section class="panel detail-panel">
+            <div class="section-head">
+              <h2>Mission Detail</h2>
+              <span id="detail-status" class="badge">Idle</span>
+            </div>
+            <div id="mission-detail" class="detail-view empty-state">
+              Select or create a mission to see the child workspace, approval gates, artifacts, and role plan.
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="mission-item-template">
+      <button class="mission-card"></button>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

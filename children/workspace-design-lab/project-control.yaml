@@ -1,0 +1,58 @@
+project_name: workspace-design-lab
+project_type: agent
+risk_tier: high
+repository_model: single-repo
+owner:
+  name: Adam Goodwin
+  role: owner
+technical_lead:
+  name: Governed Agent Lab
+  role: technical-lead
+status: active
+environments:
+  - dev
+  - sandbox
+data_classification:
+  handles_sensitive_data: false
+  handles_money: false
+  notes: "Child project created by Governed Agent Lab. External tool downloads are disabled by default and require explicit approval."
+controls:
+  required_docs:
+    - README.md
+    - docs/architecture.md
+    - docs/deployment-guide.md
+    - docs/runbook.md
+    - docs/CHANGELOG.md
+    - docs/risks/risk-register.md
+    - docs/agent-inventory.md
+    - docs/model-registry.md
+    - docs/prompt-register.md
+    - docs/tool-permission-matrix.md
+    - docs/evaluation-approach.md
+    - docs/human-oversight-rules.md
+  machine_enforcement:
+    - required-file-check
+    - governance-preflight
+    - tool-permission-review
+    - sandbox-only-execution-check
+exceptions: []
+agent_controls:
+  applicable: true
+  autonomy_level: A2
+  intended_purpose: "Child agent for Research And Development work on the goal 'Design a governed workspace flow for isolated child agents'"
+  disallowed_actions:
+    - "Placing live trades or moving money"
+    - "Using production credentials"
+    - "Installing or downloading tools without documented approval"
+    - "Changing autonomy level without governance review"
+  approved_tool_classes:
+    - local sandbox execution
+    - repository-local file editing
+    - approved read-only research tools
+  escalation_path: "Escalate to the owner before enabling new tools, network downloads, external writes, or production access."
+  human_oversight: "Human review required before changing child scope or enabling new tools."
+  rollback_disable: "Disable new tools, revert to advisory mode, and rerun preflight."
+  model_registry:
+    - docs/model-registry.md
+  prompt_registry:
+    - docs/prompt-register.md

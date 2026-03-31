@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Governed Agent Lab icon">
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#1b6b53" />
+      <stop offset="100%" stop-color="#103d31" />
+    </linearGradient>
+    <linearGradient id="sun" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#f4d28b" />
+      <stop offset="100%" stop-color="#d18c2b" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)" />
+  <circle cx="188" cy="72" r="28" fill="url(#sun)" />
+  <path
+    d="M56 178c0-31.7 25.7-57.4 57.4-57.4h29.2c31.7 0 57.4 25.7 57.4 57.4v18H56z"
+    fill="#f7f2e9"
+    opacity="0.94"
+  />
+  <path
+    d="M92 108c0-19.9 16.1-36 36-36s36 16.1 36 36-16.1 36-36 36-36-16.1-36-36z"
+    fill="#f7f2e9"
+  />
+  <path
+    d="M76 188h104"
+    fill="none"
+    stroke="#1b6b53"
+    stroke-linecap="round"
+    stroke-width="12"
+  />
+  <path
+    d="M82 58l18 18m74-18-18 18"
+    fill="none"
+    stroke="#f7f2e9"
+    stroke-linecap="round"
+    stroke-width="10"
+  />
+</svg>

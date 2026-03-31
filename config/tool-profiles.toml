@@ -1,0 +1,30 @@
+# Enable only the connectors this parent lab should expose.
+# A connector also needs its environment variables present before it is considered ready.
+
+[[connector]]
+key = "openai"
+enabled = true
+mode = "api"
+access = "read-write"
+notes = "Primary model connector for governed workflows."
+
+[[connector]]
+key = "perplexity"
+enabled = false
+mode = "api"
+access = "read-only"
+notes = "External research connector."
+
+[[connector]]
+key = "genspark_bridge"
+enabled = false
+mode = "bridge"
+access = "narrow"
+notes = "Use a local bridge instead of sharing raw login state."
+
+[[connector]]
+key = "sqlite_readonly"
+enabled = false
+mode = "local"
+access = "read-only"
+notes = "For approved local datasets only."

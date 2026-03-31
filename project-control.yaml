@@ -1,0 +1,74 @@
+project_name: governed-agent-lab
+project_type: agent
+risk_tier: high
+repository_model: single-repo
+owner:
+  name: Adam Goodwin
+  role: owner
+technical_lead:
+  name: Codex Pair Session
+  role: technical-lead
+status: active
+environments:
+  - dev
+  - sandbox
+data_classification:
+  handles_sensitive_data: false
+  handles_money: false
+  notes: "Current scope is research, backtesting, and sandbox execution only. Live trading, broker connectivity, and money movement are prohibited until the project is reclassified."
+controls:
+  required_docs:
+    - README.md
+    - docs/architecture.md
+    - docs/deployment-guide.md
+    - docs/runbook.md
+    - docs/CHANGELOG.md
+    - docs/risks/risk-register.md
+    - docs/agent-inventory.md
+    - docs/model-registry.md
+    - docs/prompt-register.md
+    - docs/tool-permission-matrix.md
+    - docs/evaluation-approach.md
+    - docs/human-oversight-rules.md
+  machine_enforcement:
+    - required-file-check
+    - governance-preflight
+    - prompt-registry-review
+    - tool-permission-review
+    - sandbox-only-execution-check
+exceptions: []
+agent_controls:
+  applicable: true
+  autonomy_level: A2
+  intended_purpose: "Autonomously research goals, run bounded sandbox experiments, and report recommendations for human review across approved domains."
+  disallowed_actions:
+    - "Placing live trades or moving money"
+    - "Connecting to broker or exchange accounts"
+    - "Using real credentials or production secrets"
+    - "Changing autonomy level without governance review"
+    - "Executing code outside the approved sandbox boundary"
+  approved_tool_classes:
+    - web research
+    - market data read-only access
+    - local sandbox execution
+    - backtesting and simulation tools
+    - repository-local file editing
+  escalation_path: "Escalate to the project owner before any action involving live execution, external account access, production deployment, or ambiguous financial risk."
+  human_oversight: "Human review is required before any strategy is promoted beyond research or sandbox use."
+  rollback_disable: "Disable execution tools, revoke credentials, and revert to advisory mode if unsafe behavior or scope drift is detected."
+  model_registry:
+    - docs/model-registry.md
+  prompt_registry:
+    - docs/prompt-register.md
+
+multi_agent_roles:
+  - planner
+  - research
+  - data
+  - strategy
+  - backtest
+  - risk
+  - review
+  - reporting
+  - paper_trade
+  - deployment
