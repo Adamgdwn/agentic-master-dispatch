@@ -46,4 +46,29 @@ DOMAIN_PROFILES = {
             "production deployment without review",
         ],
     },
+    "coding-optimization": {
+        "label": "Coding Optimization",
+        "objective": "Improve AI coding behavior through governed sandbox evaluation, feedback capture, and reusable instructions.",
+        "research_focus": [
+            "failure reproduction",
+            "goal and precondition reasoning",
+            "regression prevention",
+            "durable implementation patterns",
+            "efficiency improvements",
+            "operator guidance for coding agents",
+        ],
+        "success_metrics": [
+            "fewer repeated errors",
+            "correct reasoning about goals and prerequisites",
+            "durable code changes",
+            "evidence-backed efficiency gains",
+            "clear reusable instructions for coding agents",
+        ],
+        "blocked_actions": [
+            "autonomy increase without review",
+            "unreviewed prompt or model promotion",
+            "unsafe external writes",
+            "production deployment without review",
+        ],
+    },
 }

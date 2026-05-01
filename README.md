@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository contains a governed agent project for mission intake, governed child workspaces, sandbox execution, and recommendation workflows. Trading strategy research is one supported domain, but the parent system is designed to be reusable for other research and development tasks.
+This repository contains a governed agent project for mission intake, governed child workspaces, sandbox execution, coding-optimization loops, and recommendation workflows. Trading strategy research is one supported domain, but the parent system is designed to be reusable for other research and development tasks.
 
 ## Status
 
@@ -18,6 +18,10 @@ This repository contains a governed agent project for mission intake, governed c
 - Missions create isolated child workspaces automatically under `children/`.
 - Mission state, approvals, and artifacts are persisted in SQLite for reviewable workflows.
 - The GUI now centers on mission intake, mission queue, approval cards, connector readiness, and mission detail.
+- Coding-optimization missions now generate benchmark suites, instruction candidates, and promotion gates for sandbox AI coder improvement work.
+- Prerequisite-reasoning benchmarks can now grade concrete answers and persist the evaluation results for later tuning.
+- Coding-optimization runs now profile the local lab host and generate a Codex runner contract for host-aware sandbox benchmarking.
+- The server can now expose and execute a local sandbox benchmark suite for a lab host such as Chuwi, with results persisted for review.
 - A desktop launcher and app icon are in place for a cleaner local experience.
 - The repository is now published at `https://github.com/Adamgdwn/agentic-master-dispatch`.
 - Governance preflight passes and the current unit test suite passes locally.
@@ -25,8 +29,8 @@ This repository contains a governed agent project for mission intake, governed c
 ## Build Snapshot
 
 - Product direction: a boss agent that receives a mission, opens a governed child workspace, and controls approvals before execution.
-- Current state: mission intake, child bootstrap, approval records, artifact tracking, and a cleaner GUI are implemented.
-- Not implemented yet: real post-approval child execution, per-child connector loading, and packaged native desktop distribution.
+- Current state: mission intake, child bootstrap, approval records, artifact tracking, a sandbox coding-optimization loop, lab-host profiling, and a cleaner GUI are implemented.
+- Not implemented yet: real post-approval child execution, real benchmark execution inside child workspaces, per-child connector loading, and packaged native desktop distribution.
 - Repo URL: `https://github.com/Adamgdwn/agentic-master-dispatch`
 
 ## Quick Start
@@ -48,6 +52,9 @@ This repository contains a governed agent project for mission intake, governed c
 5. Configure connectors with `config/secrets.example.env` and `config/tool-profiles.toml` before enabling external tools.
 6. Use the boss-agent interface to define a mission, set constraints, request connectors, and create a governed child workspace automatically.
 7. Do not add broker access, exchange credentials, or live execution without reclassification and updated approvals.
+8. Use the `Coding Optimization` domain for sandbox instruction-pack experiments that target Codex or Claude Code style agents.
+9. Inspect the current lab host profile at `GET /api/lab-host/profile` when preparing a machine such as Chuwi for sandbox coding benchmarks.
+10. Review the executable lab benchmark suite at `GET /api/lab-host/benchmarks` and run it with `POST /api/lab-host/benchmarks/run`.
 
 ## Documentation
 
@@ -66,19 +73,21 @@ This repository contains a governed agent project for mission intake, governed c
 ## Next Actions For Codex
 
 1. Add real child execution flows after approval, not just mission packaging and child bootstrap.
-2. Implement per-child connector enablement so approved missions can load only the env vars and tools they were granted.
-3. Add mission actions such as `start`, `pause`, `archive`, and `complete`, with clearer lifecycle transitions in the UI.
-4. Improve the desktop experience further by packaging the launcher into a more native app bundle.
-5. Add richer artifact generation and logs so each child returns execution evidence, not just kickoff files.
-6. Update model and prompt registries once the real connector-backed execution path is finalized.
+2. Replace static readiness scoring as the primary score with instruction-pack trials against the executable lab benchmark suite.
+3. Implement per-child connector enablement so approved missions can load only the env vars and tools they were granted.
+4. Add mission actions such as `start`, `pause`, `archive`, and `complete`, with clearer lifecycle transitions in the UI.
+5. Improve the desktop experience further by packaging the launcher into a more native app bundle.
+6. Add richer artifact generation and logs so each child returns execution evidence, not just kickoff files.
+7. Update model and prompt registries once the real connector-backed execution path is finalized.
 
 ## Resume Here Later
 
 When work resumes, start with the first unfinished product milestone:
 
 1. Wire one real child execution flow end to end after approvals clear.
-2. Scope connector access per child instead of only recording approval intent.
-3. Test the workflow with one concrete mission in the GUI and refine the UX from that real path.
+2. Replace the coding loop's static readiness review with executable repo benchmarks.
+3. Scope connector access per child instead of only recording approval intent.
+4. Test the workflow with one concrete mission in the GUI and refine the UX from that real path.
 
 ## Next Actions For Adam
 

@@ -100,7 +100,7 @@ def connector_statuses(config_path: Path) -> list[dict[str, object]]:
     return statuses
 
 
-def test_connector(connector_key: str) -> dict[str, object]:
+def probe_connector(connector_key: str) -> dict[str, object]:
     if connector_key == "openai":
         return _test_openai()
     if connector_key == "perplexity":

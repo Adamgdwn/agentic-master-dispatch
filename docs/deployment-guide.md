@@ -4,6 +4,7 @@
 
 - `dev`: local development and document updates
 - `sandbox`: controlled strategy execution and backtesting only
+- `lab-host-sandbox`: a sandbox lab machine such as Chuwi used for local coding benchmarks, host profiling, and governed Codex runs
 
 There is no approved `prod` or live trading environment in the current governance scope.
 
@@ -13,7 +14,9 @@ There is no approved `prod` or live trading environment in the current governanc
 2. Review material changes to models, prompts, tools, and autonomy.
 3. Validate that the target environment is still sandbox-only.
 4. Run the applicable tests and evaluation suite.
-5. Record notable changes in `docs/CHANGELOG.md`.
+5. For coding-optimization work, inspect `GET /api/lab-host/profile` and confirm the host profile still matches the intended sandbox machine.
+6. For coding-optimization work, list and run the local suite through `GET /api/lab-host/benchmarks` and `POST /api/lab-host/benchmarks/run`.
+7. Record notable changes in `docs/CHANGELOG.md`.
 
 ## Rollback
 
@@ -27,3 +30,4 @@ Validate that:
 - no broker or exchange endpoints are configured
 - execution remains inside the sandbox
 - reporting and logs are produced for each experiment
+- local benchmark outputs are captured and reviewable when using a lab host

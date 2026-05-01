@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .coding_loop import CodingOptimizationLoop, CodingOptimizationRequest
 from .domain_profiles import DOMAIN_PROFILES
+from .lab_host import build_codex_runner_contract, collect_lab_host_profile
 from .multi_agent import MultiAgentRequest, MultiAgentSystem
 from .reporting import sample_strategy_report
 from .storage import Storage
@@ -30,16 +32,22 @@ class GovernedAgent:
     def __init__(self, storage: Storage) -> None:
         self.storage = storage
         self.multi_agent = MultiAgentSystem()
+        self.coding_loop = CodingOptimizationLoop(storage)
 
     def run(self, request: AgentRequest) -> dict[str, Any]:
         profile = DOMAIN_PROFILES[request.domain]
         memory = self.storage.list_memories(request.domain, limit=6)
+        coding_lab = None
+        if request.domain == "coding-optimization":
+            coding_lab = self.coding_loop.run(
+                CodingOptimizationRequest(goal=request.goal, constraints=request.constraints)
+            )
         first_principles = self._first_principles(request.goal, request.constraints, profile)
         research = self._research_brief(profile, memory)
         training = self._learning_plan(profile, memory)
         ethics = self._ethical_review(profile, request.goal)
         sandbox = self._sandbox_execution(profile, request.goal)
-        analytics = self._analytics(profile, request.goal)
+        analytics = self._analytics(request.domain, profile, request.goal)
         orchestration = self.multi_agent.run(
             MultiAgentRequest(
                 goal=request.goal,
@@ -48,7 +56,18 @@ class GovernedAgent:
                 blocked_actions=profile["blocked_actions"],
             )
         )
-        report = self._report(profile, request.goal, first_principles, research, training, ethics, sandbox, analytics, orchestration)
+        report = self._report(
+            profile,
+            request.goal,
+            first_principles,
+            research,
+            training,
+            ethics,
+            sandbox,
+            analytics,
+            orchestration,
+            coding_lab=coding_lab,
+        )
         summary = report["recommendation"]
 
         task = {
@@ -66,6 +85,7 @@ class GovernedAgent:
             "analytics": analytics,
             "orchestration": orchestration,
             "report": report,
+            "coding_lab": coding_lab,
         }
         task_id = self.storage.create_task(
             goal=request.goal,
@@ -172,7 +192,30 @@ class GovernedAgent:
             "goal": goal,
         }
 
-    def _analytics(self, profile: dict[str, Any], goal: str) -> dict[str, Any]:
+    def _analytics(self, domain: str, profile: dict[str, Any], goal: str) -> dict[str, Any]:
+        if domain == "coding-optimization":
+            host_profile = collect_lab_host_profile()
+            return {
+                "goal_context": goal,
+                "domain": profile["label"],
+                "reporting_focus": [
+                    "goal and precondition reasoning",
+                    "regression prevention",
+                    "durable implementation choices",
+                    "efficiency without behavior drift",
+                    "operator-ready instruction packs",
+                ],
+                "scorecard": [
+                    "error elimination",
+                    "logical correctness",
+                    "efficiency",
+                    "durability",
+                    "instruction clarity",
+                    "governance",
+                ],
+                "lab_host_status": host_profile["readiness"]["status"],
+                "runner_contract_preview": build_codex_runner_contract(host_profile)["preferred_commands"],
+            }
         analytics = sample_strategy_report()
         analytics["reporting_focus"] = [
             "trend snapshots",
@@ -195,27 +238,39 @@ class GovernedAgent:
         sandbox: dict[str, Any],
         analytics: dict[str, Any],
         orchestration: dict[str, Any],
+        coding_lab: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         recommendation = (
             f"Start with a simple, testable path for '{goal}', validate it against clear "
             "metrics, then iterate through the governed learning loop before promoting any result."
         )
+        next_actions = [
+            "Clarify the measurable success metric.",
+            "Gather evidence against the focus areas.",
+            "Build the smallest useful experiment.",
+            "Review ethical and governance constraints before any broader use.",
+        ]
+        explainability: dict[str, Any] = {
+            "first_principles": first_principles,
+            "research_focus": research["focus_areas"],
+            "learning_loop": training["loop"],
+            "ethics_decision": ethics["decision"],
+            "sandbox_status": sandbox["status"],
+            "gates": orchestration["gates"],
+        }
+        if coding_lab is not None:
+            candidate = coding_lab["result"]["recommended_candidate"]
+            recommendation = (
+                f"Use the sandbox candidate '{candidate['title']}' as the current coding instruction pack, "
+                "run real repo benchmarks next, and keep autonomy at A2 until governance approves promotion."
+            )
+            next_actions = coding_lab["result"]["adoption_path"][:4]
+            explainability["recommended_instruction_pack"] = candidate
+            explainability["promotion_blockers"] = coding_lab["result"]["promotion_blockers"]
         return {
             "recommendation": recommendation,
-            "next_actions": [
-                "Clarify the measurable success metric.",
-                "Gather evidence against the focus areas.",
-                "Build the smallest useful experiment.",
-                "Review ethical and governance constraints before any broader use.",
-            ],
-            "explainability": {
-                "first_principles": first_principles,
-                "research_focus": research["focus_areas"],
-                "learning_loop": training["loop"],
-                "ethics_decision": ethics["decision"],
-                "sandbox_status": sandbox["status"],
-                "gates": orchestration["gates"],
-            },
+            "next_actions": next_actions,
+            "explainability": explainability,
             "project_type": profile["label"],
             "reporting": analytics,
         }

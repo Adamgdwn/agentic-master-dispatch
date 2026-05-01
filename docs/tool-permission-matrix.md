@@ -8,7 +8,7 @@
 | Perplexity connector | External research and summarization | Approved API calls through `tools/perplexity_search.py` | Raw account sharing or unmanaged browser automation | Yes | Use `PERPLEXITY_API_KEY` only |
 | Genspark bridge | Narrow access to browser-only or bridge-only workflows | Calls through a local authenticated bridge | Direct credential sharing with the agent | Yes | Prefer bridge tokens over passwords |
 | SQLite read-only connector | Local dataset inspection | Read-only SQL queries through `tools/sqlite_readonly.py` | Schema changes, writes, or using production databases | Yes | Prefer dedicated research snapshots |
-| Local sandbox executor | Run strategy code, tests, and simulations inside approved boundaries | Local bounded execution and backtests | Network-enabled live execution, credential use, or unsandboxed runs | Yes for capability expansion | Must produce logs and artifacts |
+| Local sandbox executor | Run strategy code, tests, simulations, and lab-host coding benchmarks inside approved boundaries | Local bounded execution, backtests, and local benchmark suites such as preflight and unit tests | Network-enabled live execution, credential use, or unsandboxed runs | Yes for capability expansion | Must produce logs and artifacts |
 | Repository file tools | Update code and governance documents in this repo | Read and write within repo scope | Secret insertion, credential storage, or policy bypasses | No for normal repo work | Governed by repo instructions |
 | Secret management | Store minimal non-production secrets if later needed for sandbox data providers | Scoped sandbox secrets only | Production, broker, exchange, or wallet credentials | Yes | Prefer API keys, service accounts, and local env vars |
 

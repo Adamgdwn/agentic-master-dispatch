@@ -92,6 +92,62 @@ class Storage:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(mission_id) REFERENCES missions(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS learning_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mission_id INTEGER,
+                    domain TEXT NOT NULL,
+                    goal TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    evaluation_mode TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    recommended_candidate TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(mission_id) REFERENCES missions(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS learning_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL,
+                    candidate_key TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    score_json TEXT NOT NULL,
+                    instruction_pack_json TEXT NOT NULL,
+                    strengths_json TEXT NOT NULL,
+                    risks_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(run_id) REFERENCES learning_runs(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS benchmark_evaluations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    family_key TEXT NOT NULL,
+                    case_id TEXT NOT NULL,
+                    score REAL NOT NULL,
+                    passed INTEGER NOT NULL,
+                    answer TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS sandbox_benchmark_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_group TEXT NOT NULL,
+                    suite_key TEXT NOT NULL,
+                    case_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    command_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    passed INTEGER NOT NULL,
+                    exit_code INTEGER,
+                    duration_seconds REAL NOT NULL,
+                    stdout_text TEXT NOT NULL,
+                    stderr_text TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
                 """
             )
 
@@ -410,6 +466,253 @@ class Storage:
                 f"UPDATE missions SET {', '.join(fields)} WHERE id = ?",
                 tuple(params),
             )
+
+    def create_learning_run(
+        self,
+        *,
+        mission_id: int | None,
+        domain: str,
+        goal: str,
+        status: str,
+        evaluation_mode: str,
+        summary: str,
+        recommended_candidate: str,
+        result: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO learning_runs (
+                    mission_id, domain, goal, status, evaluation_mode, summary,
+                    recommended_candidate, result_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    mission_id,
+                    domain,
+                    goal,
+                    status,
+                    evaluation_mode,
+                    summary,
+                    recommended_candidate,
+                    json.dumps(result),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def add_learning_attempt(
+        self,
+        run_id: int,
+        *,
+        candidate_key: str,
+        title: str,
+        summary: str,
+        score: dict[str, Any],
+        instruction_pack: list[str],
+        strengths: list[str],
+        risks: list[str],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO learning_attempts (
+                    run_id, candidate_key, title, summary, score_json,
+                    instruction_pack_json, strengths_json, risks_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    candidate_key,
+                    title,
+                    summary,
+                    json.dumps(score),
+                    json.dumps(instruction_pack),
+                    json.dumps(strengths),
+                    json.dumps(risks),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_learning_runs(self, mission_id: int | None = None, limit: int = 24) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                id, mission_id, domain, goal, status, evaluation_mode, summary,
+                recommended_candidate, created_at
+            FROM learning_runs
+        """
+        params: list[Any] = []
+        if mission_id is not None:
+            query += " WHERE mission_id = ?"
+            params.append(mission_id)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_learning_attempts(self, run_id: int, limit: int = 100) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    id, run_id, candidate_key, title, summary, score_json,
+                    instruction_pack_json, strengths_json, risks_json, created_at
+                FROM learning_attempts
+                WHERE run_id = ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (run_id, limit),
+            ).fetchall()
+        attempts = []
+        for row in rows:
+            attempt = dict(row)
+            attempt["score"] = json.loads(attempt.pop("score_json"))
+            attempt["instruction_pack"] = json.loads(attempt.pop("instruction_pack_json"))
+            attempt["strengths"] = json.loads(attempt.pop("strengths_json"))
+            attempt["risks"] = json.loads(attempt.pop("risks_json"))
+            attempts.append(attempt)
+        return attempts
+
+    def get_learning_run(self, run_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM learning_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return None
+        learning_run = dict(row)
+        learning_run["result"] = json.loads(learning_run.pop("result_json"))
+        learning_run["attempts"] = self.list_learning_attempts(run_id)
+        return learning_run
+
+    def add_benchmark_evaluation(
+        self,
+        *,
+        family_key: str,
+        case_id: str,
+        score: float,
+        passed: bool,
+        answer: str,
+        result: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO benchmark_evaluations (
+                    family_key, case_id, score, passed, answer, result_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    family_key,
+                    case_id,
+                    score,
+                    1 if passed else 0,
+                    answer,
+                    json.dumps(result),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_benchmark_evaluations(
+        self,
+        family_key: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT id, family_key, case_id, score, passed, answer, result_json, created_at
+            FROM benchmark_evaluations
+        """
+        params: list[Any] = []
+        if family_key is not None:
+            query += " WHERE family_key = ?"
+            params.append(family_key)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        evaluations = []
+        for row in rows:
+            evaluation = dict(row)
+            evaluation["passed"] = bool(evaluation["passed"])
+            evaluation["result"] = json.loads(evaluation.pop("result_json"))
+            evaluations.append(evaluation)
+        return evaluations
+
+    def add_sandbox_benchmark_run(
+        self,
+        *,
+        run_group: str,
+        suite_key: str,
+        case_id: str,
+        title: str,
+        command: list[str],
+        status: str,
+        passed: bool,
+        exit_code: int | None,
+        duration_seconds: float,
+        stdout: str,
+        stderr: str,
+        result: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO sandbox_benchmark_runs (
+                    run_group, suite_key, case_id, title, command_json,
+                    status, passed, exit_code, duration_seconds, stdout_text,
+                    stderr_text, result_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_group,
+                    suite_key,
+                    case_id,
+                    title,
+                    json.dumps(command),
+                    status,
+                    1 if passed else 0,
+                    exit_code,
+                    duration_seconds,
+                    stdout,
+                    stderr,
+                    json.dumps(result),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_sandbox_benchmark_runs(
+        self,
+        run_group: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                id, run_group, suite_key, case_id, title, command_json, status,
+                passed, exit_code, duration_seconds, stdout_text, stderr_text,
+                result_json, created_at
+            FROM sandbox_benchmark_runs
+        """
+        params: list[Any] = []
+        if run_group is not None:
+            query += " WHERE run_group = ?"
+            params.append(run_group)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        runs = []
+        for row in rows:
+            run = dict(row)
+            run["command"] = json.loads(run.pop("command_json"))
+            run["passed"] = bool(run["passed"])
+            run["stdout"] = run.pop("stdout_text")
+            run["stderr"] = run.pop("stderr_text")
+            run["result"] = json.loads(run.pop("result_json"))
+            runs.append(run)
+        return runs
 
     def refresh_mission_status(self, mission_id: int) -> str:
         approvals = self.list_approvals(mission_id=mission_id)

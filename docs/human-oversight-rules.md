@@ -23,4 +23,5 @@ The agent must stop and escalate when:
 
 - A human reviews recommended strategies before any broader use.
 - A human reviews experiment artifacts when performance claims are material.
+- A human reviews lab-host benchmark results before treating them as evidence for broader coding-agent promotion.
 - A human approves all material changes listed in `project-control.yaml`.

@@ -18,6 +18,7 @@ Primary failure conditions:
 - local sandbox runtime
 - approved read-only data sources
 - model access listed in `docs/model-registry.md`
+- a local benchmark-capable host when testing coding-optimization flows
 
 ## Recovery
 
@@ -25,7 +26,8 @@ Primary failure conditions:
 2. Disable execution-capable tools.
 3. Remove or revoke any unexpected credentials.
 4. Review the latest changes to prompts, tools, and configs.
-5. Resume only after governance review and a passing preflight.
+5. Review the latest lab-host profile and sandbox benchmark results if the incident involved coding-optimization work.
+6. Resume only after governance review and a passing preflight.
 
 ## Escalation
 
@@ -35,3 +37,4 @@ Escalate immediately to the project owner if:
 - a broker, exchange, or wallet integration is proposed
 - an experiment acts outside the sandbox
 - the agent requests broader autonomy or privileged access
+- a lab-host benchmark run writes outside the repo or attempts unexpected external access

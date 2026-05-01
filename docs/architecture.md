@@ -2,7 +2,7 @@
 
 ## Summary
 
-The system operates as a governed boss agent with specialist child workspaces and role plans. It receives a mission, creates an isolated governed child folder, assigns a scoped execution plan, requests approvals when connectors or elevated access are needed, and produces artifacts for human review. Trading strategy work is one supported profile, and no live execution path is currently approved.
+The system operates as a governed boss agent with specialist child workspaces and role plans. It receives a mission, creates an isolated governed child folder, assigns a scoped execution plan, requests approvals when connectors or elevated access are needed, and produces artifacts for human review. Trading strategy work and sandbox coding-optimization work are supported profiles, and no live execution path is currently approved.
 
 ## Components
 
@@ -17,13 +17,19 @@ The system operates as a governed boss agent with specialist child workspaces an
 - Backtest agent: runs iterative simulations and ranks candidate strategies.
 - Risk and review agents: challenge assumptions, drawdowns, leakage, and overfitting.
 - Reporting agent: produces recommended strategies, rationale, charts, and experiment evidence.
+- Coding optimization loop: generates benchmark suites, instruction candidates, scoring summaries, and promotion gates for AI coder improvement work.
+- Lab host profiler: inspects the local sandbox machine for tool readiness, CPU, memory, disk, and runtime details before local coding benchmarks run.
+- Codex runner contract: turns the lab-host profile into host-aware commands, tuning guidance, and artifact requirements for Codex-style operators.
+- Benchmark runner: executes sandbox benchmark cases against concrete answers and records evaluation results for later tuning.
+- Sandbox benchmark executor: runs governed local benchmark commands such as preflight and unit suites, then persists the outputs for review.
+- Supplemental logic seeds: advisory-only logic-pattern drills that sharpen edge-case reasoning without overriding coding-task evidence.
 - Paper-trade agent: isolated runtime for simulated execution and promotion checks.
 - Deployment agent: separate future runtime with stronger restrictions and audit controls.
 - Governance layer: enforces autonomy, logging, tool permissions, and escalation rules.
 
 ## Data Flow
 
-Inputs enter from user missions, local configuration, and approved read-only data sources. The boss agent creates a mission package, opens an isolated child workspace, writes initial artifacts, and assigns role handoffs inside a sandboxed environment. Only reviewed candidates may move into paper trading, and no approved flow exists from this system to real brokerage or exchange execution.
+Inputs enter from user missions, local configuration, and approved read-only data sources. The boss agent creates a mission package, opens an isolated child workspace, writes initial artifacts, and assigns role handoffs inside a sandboxed environment. Coding-optimization missions additionally generate benchmark definitions, instruction packs, lab-host profiles, Codex runner contracts, executable sandbox benchmark suites, and promotion blockers so any future autonomy proposal stays reviewable. Only reviewed candidates may move into paper trading, and no approved flow exists from this system to real brokerage or exchange execution.
 
 ## Dependencies
 
@@ -40,4 +46,6 @@ Inputs enter from user missions, local configuration, and approved read-only dat
 - Autonomy is capped at A2 while the system is limited to bounded sandbox actions with logging and human review.
 - Child workspaces are isolated from one another and require explicit approval for connector access.
 - Strategy generation and deployment are explicitly separated.
+- Coding-agent instruction packs may be iterated inside the sandbox, but promotion beyond A2 still requires governance review.
+- Local lab hosts such as Chuwi may be profiled and used for sandbox benchmark execution, but that does not widen autonomy or approve external writes.
 - Any future live deployment or broker integration requires reclassification to critical and updated controls before implementation.

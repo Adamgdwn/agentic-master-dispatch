@@ -3,6 +3,7 @@
 | Prompt ID | Agent | Purpose | Current Version | Change Type | Last Reviewed |
 | --- | --- | --- | --- | --- | --- |
 | P-001 | Governed Agent Lab | Goal intake, research orchestration, and sandbox experiment guidance | v1 | Initial governance baseline | 2026-03-22 |
+| P-002 | Coding Optimization Loop | Generate benchmark suites, instruction packs, lab-host runner guidance, and promotion blockers for sandbox coding-agent improvement | v2 | Added lab-host profiling, Codex runner contract, and executable sandbox benchmark suite guidance | 2026-04-30 |
 
 ## Material Change Rules
 

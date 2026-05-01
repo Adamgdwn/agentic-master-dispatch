@@ -10,10 +10,13 @@ from urllib.parse import urlparse
 from .reporting import load_price_series, sample_strategy_report, summarize_backtest, summarize_price_series
 
 from .agent import AgentRequest, GovernedAgent
+from .benchmark_runner import BenchmarkEvaluationRequest, BenchmarkRunner
 from .child_projects import ChildProjectBootstrapper, ChildProjectRequest
-from .connectors import connector_statuses, load_local_env, test_connector
+from .connectors import connector_statuses, load_local_env, probe_connector
 from .domain_profiles import DOMAIN_PROFILES
+from .lab_host import build_codex_runner_contract, collect_lab_host_profile
 from .mission_control import MissionControl, MissionRequest
+from .sandbox_benchmarks import build_lab_host_benchmark_executor
 from .storage import Storage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +32,7 @@ class App:
         self.storage = Storage(DATA_DIR / "agent.db")
         self.children = ChildProjectBootstrapper(REPO_ROOT)
         self.agent = GovernedAgent(self.storage)
+        self.benchmarks = BenchmarkRunner()
         self.missions = MissionControl(self.storage, self.children)
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         self._seed_memory()
@@ -53,6 +57,17 @@ class App:
         self.loaded_env = load_local_env(CONFIG_DIR / "secrets.local.env")
         return self.loaded_env
 
+    def lab_host_profile(self) -> dict[str, object]:
+        return collect_lab_host_profile(REPO_ROOT)
+
+    def sandbox_benchmark_executor(self):
+        profile = self.lab_host_profile()
+        contract = build_codex_runner_contract(profile)
+        return build_lab_host_benchmark_executor(
+            REPO_ROOT,
+            test_command=contract["preferred_commands"]["test"],
+        )
+
 
 APP = App()
 
@@ -74,6 +89,90 @@ class RequestHandler(SimpleHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw.decode("utf-8"))
 
+    def _benchmark_family_payload(self, family_key: str | None = None) -> tuple[dict[str, object], int]:
+        if family_key is None:
+            return {
+                "families": APP.benchmarks.list_families(),
+                "evaluations": APP.storage.list_benchmark_evaluations(limit=20),
+            }, HTTPStatus.OK
+        try:
+            family = APP.benchmarks.get_family(family_key)
+        except ValueError:
+            return {"error": "Benchmark family not found"}, HTTPStatus.NOT_FOUND
+        return {
+            "family": family,
+            "evaluations": APP.storage.list_benchmark_evaluations(
+                family_key=family_key,
+                limit=20,
+            ),
+        }, HTTPStatus.OK
+
+    def _run_benchmark_evaluation(
+        self,
+        body: dict[str, object],
+        family_key_override: str | None = None,
+    ) -> tuple[dict[str, object], int]:
+        family_key = family_key_override or str(body.get("family_key", "")).strip()
+        case_id = str(body.get("case_id", "")).strip()
+        answer = str(body.get("answer", "")).strip()
+        if not family_key or not case_id or not answer:
+            return {"error": "family_key, case_id, and answer are required"}, HTTPStatus.BAD_REQUEST
+        try:
+            result = APP.benchmarks.evaluate(
+                BenchmarkEvaluationRequest(
+                    family_key=family_key,
+                    case_id=case_id,
+                    answer=answer,
+                )
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}, HTTPStatus.BAD_REQUEST
+        evaluation_id = APP.storage.add_benchmark_evaluation(
+            family_key=result["family_key"],
+            case_id=result["case_id"],
+            score=result["score"],
+            passed=result["passed"],
+            answer=result["answer"],
+            result=result,
+        )
+        return {"evaluation_id": evaluation_id, "result": result}, HTTPStatus.CREATED
+
+    def _lab_host_benchmark_payload(self) -> dict[str, object]:
+        suite = APP.sandbox_benchmark_executor().list_suite()
+        recent_runs = APP.storage.list_sandbox_benchmark_runs(limit=20)
+        return {
+            "suite": suite,
+            "recent_runs": recent_runs,
+        }
+
+    def _run_lab_host_benchmarks(self, body: dict[str, object]) -> tuple[dict[str, object], int]:
+        raw_case_ids = body.get("case_ids", [])
+        case_ids = raw_case_ids if isinstance(raw_case_ids, list) else []
+        try:
+            run = APP.sandbox_benchmark_executor().run(
+                [str(item).strip() for item in case_ids if str(item).strip()]
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}, HTTPStatus.BAD_REQUEST
+
+        for result in run["results"]:
+            APP.storage.add_sandbox_benchmark_run(
+                run_group=run["run_group"],
+                suite_key=run["suite"]["suite_key"],
+                case_id=result["case_id"],
+                title=result["title"],
+                command=result["command"],
+                status=result["status"],
+                passed=result["passed"],
+                exit_code=result["exit_code"],
+                duration_seconds=result["duration_seconds"],
+                stdout=result["stdout"],
+                stderr=result["stderr"],
+                result=result,
+            )
+        run["stored_results"] = APP.storage.list_sandbox_benchmark_runs(run_group=run["run_group"], limit=20)
+        return run, HTTPStatus.CREATED
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/state":
@@ -94,6 +193,10 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     "tasks": APP.storage.list_tasks(),
                     "memories": APP.storage.list_all_memories(),
                     "feedback": APP.storage.list_feedback(),
+                    "learning_runs": APP.storage.list_learning_runs(),
+                    "benchmark_evaluations": APP.storage.list_benchmark_evaluations(limit=20),
+                    "sandbox_benchmark_runs": APP.storage.list_sandbox_benchmark_runs(limit=20),
+                    "lab_host": APP.lab_host_profile(),
                     "children": APP.children.list_children(),
                     "connectors": connector_statuses(REPO_ROOT / "config" / "tool-profiles.toml"),
                     "loaded_env_keys": sorted(APP.loaded_env.keys()),
@@ -121,6 +224,25 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     self._send_json({"task": task})
                     return
             self._send_json({"error": "Task not found"}, status=404)
+            return
+        if parsed.path == "/api/benchmarks/prerequisite-reasoning":
+            payload, status = self._benchmark_family_payload("goal-and-precondition-reasoning")
+            self._send_json(payload, status=status)
+            return
+        if parsed.path == "/api/lab-host/profile":
+            self._send_json({"profile": APP.lab_host_profile()})
+            return
+        if parsed.path == "/api/lab-host/benchmarks":
+            self._send_json(self._lab_host_benchmark_payload())
+            return
+        if parsed.path == "/api/benchmarks":
+            payload, status = self._benchmark_family_payload()
+            self._send_json(payload, status=status)
+            return
+        if parsed.path.startswith("/api/benchmarks/"):
+            family_key = parsed.path.rsplit("/", 1)[-1]
+            payload, status = self._benchmark_family_payload(family_key)
+            self._send_json(payload, status=status)
             return
         return super().do_GET()
 
@@ -224,11 +346,26 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "Connector key is required"}, status=HTTPStatus.BAD_REQUEST)
                 return
             try:
-                result = test_connector(connector_key)
+                result = probe_connector(connector_key)
             except ValueError as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
             self._send_json({"result": result})
+            return
+        if parsed.path == "/api/benchmarks/prerequisite-reasoning/evaluate":
+            payload, status = self._run_benchmark_evaluation(
+                self._read_json(),
+                family_key_override="goal-and-precondition-reasoning",
+            )
+            self._send_json(payload, status=status)
+            return
+        if parsed.path == "/api/benchmarks/evaluate":
+            payload, status = self._run_benchmark_evaluation(self._read_json())
+            self._send_json(payload, status=status)
+            return
+        if parsed.path == "/api/lab-host/benchmarks/run":
+            payload, status = self._run_lab_host_benchmarks(self._read_json())
+            self._send_json(payload, status=status)
             return
         if parsed.path.startswith("/api/approvals/"):
             pieces = parsed.path.split("/")

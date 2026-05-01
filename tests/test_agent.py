@@ -6,7 +6,7 @@ import unittest
 
 from governed_agent_lab.agent import AgentRequest, GovernedAgent
 from governed_agent_lab.child_projects import ChildProjectBootstrapper, ChildProjectRequest
-from governed_agent_lab.connectors import load_local_env, test_connector
+from governed_agent_lab.connectors import load_local_env, probe_connector
 from governed_agent_lab.storage import Storage
 
 
@@ -66,8 +66,28 @@ class AgentTests(unittest.TestCase):
             conn.close()
 
             os.environ["SQLITE_DB_PATH"] = str(db_path)
-            result = test_connector("sqlite_readonly")
+            result = probe_connector("sqlite_readonly")
             self.assertTrue(result["ok"])
+
+    def test_coding_optimization_task_contains_learning_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = Storage(Path(tmp) / "agent.db")
+            agent = GovernedAgent(storage)
+            task = agent.run(
+                AgentRequest(
+                    goal="Build a sandbox process that improves AI code fixes",
+                    domain="coding-optimization",
+                    constraints="Keep autonomy capped at A2",
+                )
+            )
+            self.assertIsNotNone(task["coding_lab"])
+            assert task["coding_lab"] is not None
+            self.assertEqual(task["coding_lab"]["result"]["evaluation_mode"], "static-readiness")
+            self.assertEqual(
+                task["coding_lab"]["result"]["sandbox_benchmark_suite"]["suite_key"],
+                "lab-host-coding-sandbox",
+            )
+            self.assertIn("recommended_instruction_pack", task["report"]["explainability"])
 
 
 if __name__ == "__main__":

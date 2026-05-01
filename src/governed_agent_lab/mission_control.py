@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .coding_loop import CodingOptimizationLoop, CodingOptimizationRequest
 from .child_projects import ChildProjectBootstrapper, ChildProjectRequest, slugify
 from .domain_profiles import DOMAIN_PROFILES
+from .lab_host import codex_runner_contract_markdown
 from .multi_agent import MultiAgentRequest, MultiAgentSystem
+from .sandbox_benchmarks import benchmark_suite_markdown
 from .storage import Storage
 
 
@@ -32,6 +35,7 @@ class MissionControl:
         self.storage = storage
         self.children = children
         self.multi_agent = MultiAgentSystem()
+        self.coding_loop = CodingOptimizationLoop(storage, root_path=self.children.repo_root)
 
     def create_mission(self, request: MissionRequest) -> dict[str, Any]:
         profile = DOMAIN_PROFILES[request.domain]
@@ -81,6 +85,18 @@ class MissionControl:
             result=plan,
         )
 
+        if request.domain == "coding-optimization":
+            learning_run = self.coding_loop.run(
+                CodingOptimizationRequest(goal=request.goal, constraints=request.constraints),
+                mission_id=mission_id,
+            )
+            plan["optimization_lab"] = self._optimization_lab_summary(learning_run)
+            summary = (
+                f"Mission '{mission_name}' is staging a governed coding optimization loop. "
+                f"Recommended pack: {plan['optimization_lab']['recommended_candidate']['title']}."
+            )
+            self.storage.update_mission_result(mission_id, summary=summary, result=plan)
+
         for approval in approvals:
             self.storage.add_approval(mission_id, **approval)
 
@@ -96,7 +112,7 @@ class MissionControl:
 
         status = self.storage.refresh_mission_status(mission_id)
         plan["status"] = status
-        self.storage.update_mission_result(mission_id, status=status, result=plan)
+        self.storage.update_mission_result(mission_id, status=status, summary=summary, result=plan)
         self.storage.add_memory(
             request.domain,
             "mission",
@@ -279,7 +295,7 @@ class MissionControl:
         kickoff_path = artifacts_root / "01-kickoff.md"
         kickoff_path.write_text(self._kickoff_markdown(plan), encoding="utf-8")
 
-        return [
+        artifacts = [
             {
                 "artifact_type": "brief",
                 "title": "Mission brief",
@@ -309,6 +325,93 @@ class MissionControl:
                 "content": {"phase": "child-bootstrap"},
             },
         ]
+
+        if plan.get("optimization_lab"):
+            optimization = plan["optimization_lab"]
+            benchmark_path = workspace_root / "coding-benchmark.json"
+            benchmark_path.write_text(json.dumps(optimization["benchmark"], indent=2), encoding="utf-8")
+
+            instructions_path = workspace_root / "instruction-candidates.md"
+            instructions_path.write_text(
+                self._instruction_candidates_markdown(optimization),
+                encoding="utf-8",
+            )
+
+            promotion_path = workspace_root / "promotion-gates.md"
+            promotion_path.write_text(
+                self._promotion_gates_markdown(optimization),
+                encoding="utf-8",
+            )
+
+            host_profile_path = workspace_root / "lab-host-profile.json"
+            host_profile_path.write_text(
+                json.dumps(optimization["lab_host_profile"], indent=2),
+                encoding="utf-8",
+            )
+
+            codex_contract_path = workspace_root / "codex-runner-contract.md"
+            codex_contract_path.write_text(
+                codex_runner_contract_markdown(
+                    optimization["codex_runner_contract"],
+                    optimization["lab_host_profile"],
+                ),
+                encoding="utf-8",
+            )
+
+            sandbox_suite_path = workspace_root / "sandbox-benchmark-suite.md"
+            sandbox_suite_path.write_text(
+                benchmark_suite_markdown(optimization["sandbox_benchmark_suite"]),
+                encoding="utf-8",
+            )
+
+            artifacts.extend(
+                [
+                    {
+                        "artifact_type": "benchmark",
+                        "title": "Coding benchmark suite",
+                        "path": str(benchmark_path),
+                        "summary": "Sandbox benchmark cases for the coding optimization loop.",
+                        "content": {"benchmark_name": optimization["benchmark"]["name"]},
+                    },
+                    {
+                        "artifact_type": "instruction-pack",
+                        "title": "Instruction candidates",
+                        "path": str(instructions_path),
+                        "summary": "Candidate operator instructions for Codex or Claude Code style agents.",
+                        "content": {"recommended_candidate": optimization["recommended_candidate"]["candidate_key"]},
+                    },
+                    {
+                        "artifact_type": "promotion-gates",
+                        "title": "Promotion gates",
+                        "path": str(promotion_path),
+                        "summary": "Governance blockers and promotion criteria for any stronger autonomy proposal.",
+                        "content": {"learning_run_id": optimization["learning_run_id"]},
+                    },
+                    {
+                        "artifact_type": "lab-host-profile",
+                        "title": "Lab host profile",
+                        "path": str(host_profile_path),
+                        "summary": "A host-level readiness snapshot for local sandbox coding benchmarks.",
+                        "content": {"status": optimization["lab_host_profile"]["readiness"]["status"]},
+                    },
+                    {
+                        "artifact_type": "codex-runner-contract",
+                        "title": "Codex runner contract",
+                        "path": str(codex_contract_path),
+                        "summary": "Host-aware execution guidance for Codex on a sandbox lab machine.",
+                        "content": {"runner": optimization["codex_runner_contract"]["runner"]},
+                    },
+                    {
+                        "artifact_type": "sandbox-benchmark-suite",
+                        "title": "Sandbox benchmark suite",
+                        "path": str(sandbox_suite_path),
+                        "summary": "Executable local benchmark cases for validating the coding loop on the lab host.",
+                        "content": {"suite_key": optimization["sandbox_benchmark_suite"]["suite_key"]},
+                    },
+                ]
+            )
+
+        return artifacts
 
     def _mission_brief_markdown(self, mission_id: int, mission_name: str, plan: dict[str, Any]) -> str:
         brief = plan["brief"]
@@ -376,3 +479,71 @@ class MissionControl:
         for phase in plan["phases"]:
             lines.append(f"- {phase['title']}: {phase['summary']}")
         return "\n".join(lines) + "\n"
+
+    def _optimization_lab_summary(self, learning_run: dict[str, Any]) -> dict[str, Any]:
+        result = learning_run["result"]
+        return {
+            "learning_run_id": learning_run["id"],
+            "status": learning_run["status"],
+            "evaluation_mode": result["evaluation_mode"],
+            "benchmark": result["benchmark"],
+            "lab_host_profile": result["lab_host_profile"],
+            "codex_runner_contract": result["codex_runner_contract"],
+            "sandbox_benchmark_suite": result["sandbox_benchmark_suite"],
+            "recommended_candidate": result["recommended_candidate"],
+            "promotion_blockers": result["promotion_blockers"],
+            "adoption_path": result["adoption_path"],
+            "attempts": learning_run["attempts"],
+        }
+
+    def _instruction_candidates_markdown(self, optimization: dict[str, Any]) -> str:
+        recommended = optimization["recommended_candidate"]
+        lines = [
+            "# Instruction Candidates",
+            "",
+            f"Recommended candidate: {recommended['title']}",
+            f"Static readiness score: {recommended['score']['static_readiness']}",
+            "",
+        ]
+        for attempt in optimization["attempts"]:
+            lines.extend(
+                [
+                    f"## {attempt['title']}",
+                    "",
+                    f"- Candidate Key: {attempt['candidate_key']}",
+                    f"- Static Readiness: {attempt['score']['static_readiness']}",
+                    "",
+                    "### Instruction Pack",
+                    "",
+                ]
+            )
+            for item in attempt["instruction_pack"]:
+                lines.append(f"- {item}")
+            lines.extend(["", "### Strengths", ""])
+            for item in attempt["strengths"]:
+                lines.append(f"- {item}")
+            lines.extend(["", "### Risks", ""])
+            for item in attempt["risks"]:
+                lines.append(f"- {item}")
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _promotion_gates_markdown(self, optimization: dict[str, Any]) -> str:
+        lines = [
+            "# Promotion Gates",
+            "",
+            f"- Learning Run ID: {optimization['learning_run_id']}",
+            f"- Evaluation Mode: {optimization['evaluation_mode']}",
+            "",
+            "## Promotion Blockers",
+            "",
+        ]
+        for blocker in optimization["promotion_blockers"]:
+            lines.append(f"- {blocker}")
+        lines.extend(["", "## Adoption Path", ""])
+        for step in optimization["adoption_path"]:
+            lines.append(f"- {step}")
+        lines.extend(["", "## Operator Pack", ""])
+        for item in optimization["recommended_candidate"]["instruction_pack"]:
+            lines.append(f"- {item}")
+        return "\n".join(lines).rstrip() + "\n"

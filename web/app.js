@@ -1,6 +1,7 @@
 const state = {
   connectors: [],
   loadedEnvKeys: [],
+  learningRuns: [],
   missions: [],
   pendingApprovals: [],
   currentMissionId: null,
@@ -33,11 +34,12 @@ async function fetchState() {
   const payload = await response.json();
   state.connectors = payload.connectors || [];
   state.loadedEnvKeys = payload.loaded_env_keys || [];
+  state.learningRuns = payload.learning_runs || [];
   state.missions = payload.missions || [];
   state.pendingApprovals = payload.pending_approvals || [];
 
   renderProject(payload.project || {});
-  renderOverview(payload.project || {}, state.missions, state.pendingApprovals, payload.children || []);
+  renderOverview(payload.project || {}, state.missions, state.pendingApprovals, payload.children || [], state.learningRuns);
   renderConnectorChoices(state.connectors);
   renderConnectors(state.connectors, state.loadedEnvKeys);
   renderApprovalQueue(state.pendingApprovals);
@@ -64,12 +66,13 @@ function renderProject(project) {
   document.getElementById("scope-badge").textContent = project.autonomy_level || "A2";
 }
 
-function renderOverview(project, missions, approvals, children) {
+function renderOverview(project, missions, approvals, children, learningRuns) {
   const container = document.getElementById("overview-grid");
   const cards = [
     ["Missions", missions.length],
     ["Approvals", approvals.length],
     ["Children", children.length],
+    ["Learning Runs", learningRuns.length],
     ["Risk", project.risk_tier || "high"],
   ];
   container.innerHTML = cards
