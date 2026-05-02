@@ -16,3 +16,7 @@
 - Added benchmark-history-aware candidate ranking so repeated evaluation outcomes now influence instruction-pack selection.
 - Added lab-host profiling plus a Codex runner contract so coding-optimization missions can tune sandbox benchmark work to the local machine.
 - Added an executable lab-host sandbox benchmark suite, storage for benchmark runs, and API endpoints to list and run the suite locally.
+- Added a hard-coded exploratory intake UI with agent framing preview before mission creation.
+- Added neutral objective parsing for broad tradeoff goals such as improving one capability while reducing another cost.
+- Added Linux launch support with a root shell launcher, safer interpreter selection, and a desktop-entry installer for Xubuntu and Pop!_OS style environments.
+- Added a first-class project, mission, run, and outcome lifecycle so new work gets isolated run workspaces instead of overwriting prior exploratory work.

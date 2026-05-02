@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from .coding_loop import CodingOptimizationLoop, CodingOptimizationRequest
-from .child_projects import ChildProjectBootstrapper, ChildProjectRequest, slugify
+from .child_projects import (
+    ChildProjectBootstrapper,
+    GovernedProjectRequest,
+    GovernedRunRequest,
+    slugify,
+)
 from .domain_profiles import DOMAIN_PROFILES
 from .lab_host import codex_runner_contract_markdown
 from .multi_agent import MultiAgentRequest, MultiAgentSystem
@@ -26,6 +31,8 @@ class MissionRequest:
     constraints: str = ""
     owner: str = ""
     mission_name: str = ""
+    project_name: str = ""
+    project_kind: str = "project"
     priority: str = DEFAULT_PRIORITY
     requested_connectors: list[str] | None = None
 
@@ -40,12 +47,13 @@ class MissionControl:
     def create_mission(self, request: MissionRequest) -> dict[str, Any]:
         profile = DOMAIN_PROFILES[request.domain]
         mission_name = request.mission_name.strip() or self._default_mission_name(request.goal, profile["label"])
-        child_name = self._reserve_child_name(mission_name)
+        project_name = request.project_name.strip() or mission_name
         requested_connectors = self._normalize_connectors(request.requested_connectors)
-
-        child = self.children.create_child(
-            ChildProjectRequest(
-                name=child_name,
+        project = self._ensure_project_record(request, profile, project_name)
+        run_workspace = self.children.create_run_workspace(
+            GovernedRunRequest(
+                project_slug=project["slug"],
+                mission_name=mission_name,
                 goal=request.goal,
                 domain=request.domain,
                 owner=request.owner,
@@ -62,14 +70,16 @@ class MissionControl:
                 blocked_actions=profile["blocked_actions"],
             )
         )
-        plan = self._build_plan(profile, request, requested_connectors, child, orchestration)
+        plan = self._build_plan(profile, request, requested_connectors, project, run_workspace, orchestration)
         status = "awaiting-approval" if approvals else "ready"
         summary = (
-            f"Mission '{mission_name}' is ready to stand up a governed child workspace for "
+            f"Mission '{mission_name}' is ready to stand up a governed run workspace for "
             f"{profile['label'].lower()} work."
         )
 
         mission_id = self.storage.create_mission(
+            project_id=project["id"],
+            run_id=None,
             name=mission_name,
             goal=request.goal,
             domain=request.domain,
@@ -77,13 +87,28 @@ class MissionControl:
             priority=request.priority or DEFAULT_PRIORITY,
             status=status,
             constraints=request.constraints,
-            child_name=child["name"],
-            child_slug=child["slug"],
-            child_path=child["path"],
+            child_name=run_workspace["name"],
+            child_slug=run_workspace["slug"],
+            child_path=run_workspace["path"],
             summary=summary,
             spec=plan["spec"],
             result=plan,
         )
+        run_summary = (
+            f"Run {run_workspace['run_key']} created for mission '{mission_name}' inside project '{project['name']}'."
+        )
+        run_id = self.storage.create_run(
+            project_id=project["id"],
+            mission_id=mission_id,
+            run_key=run_workspace["run_key"],
+            title=mission_name,
+            status=status,
+            root_path=run_workspace["path"],
+            summary=run_summary,
+            spec=plan["spec"]["run"],
+            result={"phases": plan["phases"], "governance": plan["governance"]},
+        )
+        self.storage.update_mission_links(mission_id, project_id=project["id"], run_id=run_id)
 
         if request.domain == "coding-optimization":
             learning_run = self.coding_loop.run(
@@ -102,7 +127,7 @@ class MissionControl:
 
         artifact_specs = self._write_child_files(
             mission_id=mission_id,
-            child_root=Path(child["path"]),
+            child_root=Path(run_workspace["path"]),
             mission_name=mission_name,
             plan=plan,
             approvals=approvals,
@@ -110,13 +135,30 @@ class MissionControl:
         for artifact in artifact_specs:
             self.storage.add_artifact(mission_id, **artifact)
 
+        if plan.get("optimization_lab"):
+            recommended = plan["optimization_lab"]["recommended_candidate"]
+            outcome_id = self.storage.create_outcome(
+                project_id=project["id"],
+                run_id=run_id,
+                name=f"{mission_name} recommendation",
+                status="draft",
+                path=str(Path(run_workspace["path"]) / "workspace" / "instruction-candidates.md"),
+                summary="Draft outcome generated from the coding optimization recommendation.",
+                content={
+                    "recommended_candidate": recommended["candidate_key"],
+                    "learning_run_id": plan["optimization_lab"]["learning_run_id"],
+                },
+            )
+            project["current_outcome_id"] = outcome_id
+
         status = self.storage.refresh_mission_status(mission_id)
         plan["status"] = status
         self.storage.update_mission_result(mission_id, status=status, summary=summary, result=plan)
+        self.storage.update_run(run_id, status=status, result={"phases": plan["phases"], "governance": plan["governance"]})
         self.storage.add_memory(
             request.domain,
             "mission",
-            f"Mission {mission_id} created child workspace '{child['name']}' for goal '{request.goal[:80]}'.",
+            f"Mission {mission_id} created run workspace '{run_workspace['run_key']}' in project '{project['name']}' for goal '{request.goal[:80]}'.",
             weight=1.4,
         )
         return self.storage.get_mission(mission_id) or {}
@@ -137,6 +179,49 @@ class MissionControl:
     def _normalize_connectors(self, connectors: list[str] | None) -> list[str]:
         requested = connectors or []
         return [item for item in requested if item in ALLOWED_CONNECTORS]
+
+    def _ensure_project_record(
+        self,
+        request: MissionRequest,
+        profile: dict[str, Any],
+        project_name: str,
+    ) -> dict[str, Any]:
+        slug = slugify(project_name)
+        existing = self.storage.get_project_by_slug(slug)
+        if existing is not None:
+            return existing
+
+        project_workspace = self.children.ensure_project(
+            GovernedProjectRequest(
+                name=project_name,
+                domain=request.domain,
+                owner=request.owner,
+                purpose=request.goal,
+                constraints=request.constraints,
+                kind=request.project_kind or "project",
+            )
+        )
+        project_id = self.storage.create_project(
+            name=project_workspace["name"],
+            slug=project_workspace["slug"],
+            domain=request.domain,
+            kind=request.project_kind or "project",
+            owner=request.owner or "Unassigned",
+            status="active",
+            root_path=project_workspace["path"],
+            summary=f"Governed project root for {profile['label'].lower()} work.",
+            metadata={
+                "purpose": request.goal,
+                "goal_path": project_workspace["goal_path"],
+            },
+        )
+        return self.storage.get_project(project_id) or {
+            "id": project_id,
+            "name": project_workspace["name"],
+            "slug": project_workspace["slug"],
+            "root_path": project_workspace["path"],
+            "kind": request.project_kind or "project",
+        }
 
     def _default_mission_name(self, goal: str, domain_label: str) -> str:
         words = re.findall(r"[A-Za-z0-9]+", goal)
@@ -182,12 +267,13 @@ class MissionControl:
         profile: dict[str, Any],
         request: MissionRequest,
         requested_connectors: list[str],
-        child: dict[str, str],
+        project: dict[str, Any],
+        run_workspace: dict[str, str],
         orchestration: dict[str, Any],
     ) -> dict[str, Any]:
         success_definition = (
-            "Create a governed child workspace, keep scope narrow, produce reusable artifacts, and avoid "
-            "granting more permissions than the goal requires."
+            "Create a governed project-aligned run workspace, keep scope narrow, preserve prior work, "
+            "and promote outcomes explicitly instead of overwriting them."
         )
         phases = [
             {
@@ -198,9 +284,9 @@ class MissionControl:
             },
             {
                 "id": "child-bootstrap",
-                "title": "Create governed child workspace",
+                "title": "Create governed run workspace",
                 "status": "complete",
-                "summary": f"Workspace created at {child['path']}.",
+                "summary": f"Run workspace created at {run_workspace['path']}.",
             },
             {
                 "id": "approval-gate",
@@ -223,10 +309,10 @@ class MissionControl:
         ]
 
         child_spec = {
-            "name": child["name"],
-            "slug": child["slug"],
-            "path": child["path"],
-            "goal_path": child["goal_path"],
+            "name": run_workspace["name"],
+            "slug": run_workspace["slug"],
+            "path": run_workspace["path"],
+            "goal_path": run_workspace["goal_path"],
             "approved_boundary": "sandbox-only A2",
             "requested_connectors": requested_connectors,
             "recommended_roles": ["planner", "research", "review", "reporting"],
@@ -237,6 +323,21 @@ class MissionControl:
             "priority": request.priority or DEFAULT_PRIORITY,
             "success_definition": success_definition,
             "requested_connectors": requested_connectors,
+            "project": {
+                "id": project["id"],
+                "name": project["name"],
+                "slug": project["slug"],
+                "kind": project["kind"],
+                "path": project["root_path"],
+                "current_outcome_id": project.get("current_outcome_id"),
+            },
+            "run": {
+                "key": run_workspace["run_key"],
+                "name": run_workspace["name"],
+                "slug": run_workspace["slug"],
+                "path": run_workspace["path"],
+                "goal_path": run_workspace["goal_path"],
+            },
             "child": child_spec,
         }
         return {
@@ -263,10 +364,12 @@ class MissionControl:
                 ],
             },
             "child": child_spec,
+            "project": spec["project"],
+            "run": spec["run"],
             "next_actions": [
                 "Review the mission brief.",
                 "Approve or hold requested connectors.",
-                "Open the child workspace and begin execution after approvals clear.",
+                "Open the isolated run workspace and begin execution after approvals clear.",
             ],
         }
 
@@ -416,6 +519,8 @@ class MissionControl:
     def _mission_brief_markdown(self, mission_id: int, mission_name: str, plan: dict[str, Any]) -> str:
         brief = plan["brief"]
         child = plan["child"]
+        project = plan["project"]
+        run = plan["run"]
         return f"""# Mission Brief
 
 ## Mission
@@ -424,7 +529,9 @@ class MissionControl:
 - Name: {mission_name}
 - Domain: {brief['domain_label']}
 - Owner: {brief['owner']}
-- Child Workspace: {child['path']}
+- Project: {project['name']} ({project['kind']})
+- Project Root: {project['path']}
+- Run Workspace: {run['path']}
 
 ## Goal
 
@@ -449,7 +556,7 @@ class MissionControl:
         lines = [
             "# Approval Requests",
             "",
-            "Review these items before activating the child workspace.",
+            "Review these items before activating the run workspace.",
             "",
         ]
         for approval in approvals:
@@ -486,6 +593,7 @@ class MissionControl:
             "learning_run_id": learning_run["id"],
             "status": learning_run["status"],
             "evaluation_mode": result["evaluation_mode"],
+            "objective_profile": result["objective_profile"],
             "benchmark": result["benchmark"],
             "lab_host_profile": result["lab_host_profile"],
             "codex_runner_contract": result["codex_runner_contract"],

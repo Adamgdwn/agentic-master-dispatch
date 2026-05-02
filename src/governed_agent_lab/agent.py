@@ -266,6 +266,7 @@ class GovernedAgent:
             )
             next_actions = coding_lab["result"]["adoption_path"][:4]
             explainability["recommended_instruction_pack"] = candidate
+            explainability["objective_profile"] = coding_lab["result"]["objective_profile"]
             explainability["promotion_blockers"] = coding_lab["result"]["promotion_blockers"]
         return {
             "recommendation": recommendation,

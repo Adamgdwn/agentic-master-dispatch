@@ -50,29 +50,93 @@
       </aside>
 
       <main class="main-stage">
-        <section class="hero">
+        <section class="hero explorer-hero">
           <div class="hero-copy">
-            <p class="eyebrow">Mission Control</p>
-            <h2>Tell the boss what you want done.</h2>
+            <p class="eyebrow">Exploratory Intake</p>
+            <h2>State the mission. Keep the answer open.</h2>
             <p>
-              The parent agent will open a governed mission, create a dedicated child folder, hold for approvals when needed, and keep the work separate from every other request.
+              Start with plain-language intent, hard constraints, and evidence rules. The agent should derive candidate dimensions and tradeoff axes before anyone decides what “best” means.
             </p>
+            <div class="guide-strip">
+              <div class="guide-chip">Intent first</div>
+              <div class="guide-chip">Hunches kept separate</div>
+              <div class="guide-chip">Evidence before ranking</div>
+            </div>
           </div>
 
+          <section class="panel insight-panel">
+            <div class="section-head">
+              <h2>How This Intake Works</h2>
+              <span class="badge subtle">Hard coded start</span>
+            </div>
+            <div class="insight-grid">
+              <article class="guide-card">
+                <strong>1. Mission</strong>
+                <p>Say what you want in ordinary language without naming the winning method.</p>
+              </article>
+              <article class="guide-card">
+                <strong>2. Constraints</strong>
+                <p>Declare hard boundaries, available environment, and what evidence counts.</p>
+              </article>
+              <article class="guide-card">
+                <strong>3. Preview</strong>
+                <p>Review the agent’s derived framing before opening a governed mission.</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section class="intake-layout">
           <section class="panel intake-panel">
             <div class="section-head">
-              <h2>Create Mission</h2>
-              <span class="badge subtle">Clean intake</span>
+              <h2>Exploration Brief</h2>
+              <span class="badge subtle">Starting interface</span>
             </div>
             <form id="mission-form" class="intake-form">
               <label>
-                Goal
+                Mission
                 <textarea
                   id="goal"
-                  rows="5"
-                  placeholder="Example: Research a compact note-taking workflow, create a governed child workspace, and return a recommendation with implementation options."
+                  rows="4"
+                  placeholder="Example: Improve programming capability under tighter resource limits."
                 ></textarea>
+                <small class="field-hint">Describe the mission plainly. Do not name the preferred answer here.</small>
               </label>
+
+              <div class="form-grid">
+                <label>
+                  Domain
+                  <select id="domain">
+                    <option value="coding-optimization">Coding Optimization</option>
+                    <option value="research-and-development">Research And Development</option>
+                    <option value="trading-strategy">Trading Strategy</option>
+                  </select>
+                </label>
+                <label>
+                  Priority
+                  <select id="priority">
+                    <option value="deep">Deep</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="lean">Lean</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label>
+                  Project Name
+                  <input id="project-name" type="text" placeholder="Optional durable project name" />
+                </label>
+                <label>
+                  Project Kind
+                  <select id="project-kind">
+                    <option value="project">Project</option>
+                    <option value="application">Application</option>
+                    <option value="agent">Agent</option>
+                    <option value="outcome-lab">Outcome Lab</option>
+                  </select>
+                </label>
+              </div>
 
               <div class="form-grid">
                 <label>
@@ -80,33 +144,46 @@
                   <input id="mission-name" type="text" placeholder="Optional custom mission name" />
                 </label>
                 <label>
-                  Domain
-                  <select id="domain">
-                    <option value="research-and-development">Research And Development</option>
-                    <option value="coding-optimization">Coding Optimization</option>
-                    <option value="trading-strategy">Trading Strategy</option>
-                  </select>
-                </label>
-              </div>
-
-              <div class="form-grid">
-                <label>
                   Owner
                   <input id="owner" type="text" placeholder="Optional owner name" />
-                </label>
-                <label>
-                  Priority
-                  <select id="priority">
-                    <option value="balanced">Balanced</option>
-                    <option value="lean">Lean</option>
-                    <option value="deep">Deep</option>
-                  </select>
                 </label>
               </div>
 
               <label>
-                Constraints
-                <input id="constraints" type="text" placeholder="Keep it sandboxed, evidence-backed, and narrow." />
+                Hard Constraints
+                <textarea id="hard-constraints" rows="4">Stay within sandbox-only A2 autonomy.
+Do not assume external writes, live credentials, or production deployment.
+Keep outputs reviewable and evidence-backed.</textarea>
+                <small class="field-hint">Only put non-negotiables here.</small>
+              </label>
+
+              <label>
+                Available Environment
+                <textarea id="available-environment" rows="4">Current local lab host.
+Approved sandbox execution and repository-local tooling.
+Connector access only if explicitly enabled and approved.</textarea>
+                <small class="field-hint">Tell the agent what it can actually use before it invents abstractions.</small>
+              </label>
+
+              <label>
+                Evidence Requirements
+                <textarea id="evidence-requirements" rows="4">Show candidate measurable dimensions before ranking options.
+Use host characteristics, benchmarks, artifacts, and reproducible checks.
+Separate facts, assumptions, and recommendations.</textarea>
+                <small class="field-hint">Define what counts as proof without choosing the winner.</small>
+              </label>
+
+              <label>
+                Operator Hunches
+                <textarea id="operator-hunches" rows="3" placeholder="Optional hypotheses or intuitions to preserve separately from the objective."></textarea>
+                <small class="field-hint">These are stored separately from the mission intent so they do not become the scoring rule by default.</small>
+              </label>
+
+              <label>
+                Disallowed Assumptions
+                <textarea id="disallowed-assumptions" rows="3">Do not convert operator hunches into automatic objective weights.
+Do not silently optimize for unapproved external systems or hidden proxy metrics.</textarea>
+                <small class="field-hint">Use this to block the agent from sneaking in the wrong objective.</small>
               </label>
 
               <fieldset class="connector-fieldset">
@@ -114,11 +191,23 @@
                 <div id="connector-options" class="connector-options"></div>
               </fieldset>
 
-              <div class="form-actions">
+              <div class="form-actions dual-actions">
+                <button id="preview-button" type="button" class="ghost-button">Preview Framing</button>
                 <button type="submit" class="primary-button">Create Governed Mission</button>
-                <p id="mission-status" class="muted inline-note"></p>
               </div>
+              <p id="preview-status" class="muted inline-note"></p>
+              <p id="mission-status" class="muted inline-note"></p>
             </form>
+          </section>
+
+          <section class="panel preview-panel">
+            <div class="section-head">
+              <h2>Agent Framing Preview</h2>
+              <span id="preview-mode" class="badge subtle">Waiting</span>
+            </div>
+            <div id="preview-content" class="preview-content empty-state">
+              Fill in the exploration brief to preview how the agent will frame the mission before any mission is created.
+            </div>
           </section>
         </section>
 

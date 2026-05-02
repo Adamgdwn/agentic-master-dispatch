@@ -17,6 +17,21 @@ class Storage:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _column_names(self, conn: sqlite3.Connection, table_name: str) -> set[str]:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row["name"]) for row in rows}
+
+    def _ensure_column(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        column_name: str,
+        definition: str,
+    ) -> None:
+        if column_name in self._column_names(conn, table_name):
+            return
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(
@@ -51,6 +66,8 @@ class Storage:
 
                 CREATE TABLE IF NOT EXISTS missions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER,
+                    run_id INTEGER,
                     name TEXT NOT NULL,
                     goal TEXT NOT NULL,
                     domain TEXT NOT NULL,
@@ -65,7 +82,57 @@ class Storage:
                     spec_json TEXT NOT NULL,
                     result_json TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(project_id) REFERENCES projects(id),
+                    FOREIGN KEY(run_id) REFERENCES mission_runs(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    slug TEXT NOT NULL UNIQUE,
+                    domain TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    root_path TEXT NOT NULL,
+                    current_outcome_id INTEGER,
+                    summary TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS mission_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    mission_id INTEGER,
+                    run_key TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    root_path TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    spec_json TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(project_id) REFERENCES projects(id),
+                    FOREIGN KEY(mission_id) REFERENCES missions(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS outcomes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    run_id INTEGER,
+                    name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    content_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(project_id) REFERENCES projects(id),
+                    FOREIGN KEY(run_id) REFERENCES mission_runs(id)
                 );
 
                 CREATE TABLE IF NOT EXISTS approvals (
@@ -150,6 +217,8 @@ class Storage:
                 );
                 """
             )
+            self._ensure_column(conn, "missions", "project_id", "INTEGER")
+            self._ensure_column(conn, "missions", "run_id", "INTEGER")
 
     def create_task(
         self, goal: str, domain: str, status: str, summary: str, result: dict[str, Any]
@@ -240,9 +309,115 @@ class Storage:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def create_project(
+        self,
+        *,
+        name: str,
+        slug: str,
+        domain: str,
+        kind: str,
+        owner: str,
+        status: str,
+        root_path: str,
+        summary: str,
+        metadata: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO projects (
+                    name, slug, domain, kind, owner, status, root_path,
+                    summary, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    slug,
+                    domain,
+                    kind,
+                    owner,
+                    status,
+                    root_path,
+                    summary,
+                    json.dumps(metadata),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def get_project_by_slug(self, slug: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            return None
+        return self._project_record(dict(row))
+
+    def get_project(self, project_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            return None
+        return self._project_record(dict(row))
+
+    def list_projects(self, limit: int = 24) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    id, name, slug, domain, kind, owner, status, root_path,
+                    current_outcome_id, summary, metadata_json, created_at, updated_at
+                FROM projects
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._project_record(dict(row)) for row in rows]
+
+    def update_project(
+        self,
+        project_id: int,
+        *,
+        status: str | None = None,
+        summary: str | None = None,
+        current_outcome_id: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        fields: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            fields.append("status = ?")
+            params.append(status)
+        if summary is not None:
+            fields.append("summary = ?")
+            params.append(summary)
+        if current_outcome_id is not None:
+            fields.append("current_outcome_id = ?")
+            params.append(current_outcome_id)
+        if metadata is not None:
+            fields.append("metadata_json = ?")
+            params.append(json.dumps(metadata))
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(project_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE projects SET {', '.join(fields)} WHERE id = ?",
+                tuple(params),
+            )
+
+    def _project_record(self, project: dict[str, Any]) -> dict[str, Any]:
+        project["metadata"] = json.loads(project.pop("metadata_json"))
+        if project.get("current_outcome_id"):
+            project["current_outcome"] = self.get_outcome(int(project["current_outcome_id"]))
+        else:
+            project["current_outcome"] = None
+        return project
+
     def create_mission(
         self,
         *,
+        project_id: int | None,
+        run_id: int | None,
         name: str,
         goal: str,
         domain: str,
@@ -261,12 +436,14 @@ class Storage:
             cursor = conn.execute(
                 """
                 INSERT INTO missions (
-                    name, goal, domain, owner, priority, status, constraints,
+                    project_id, run_id, name, goal, domain, owner, priority, status, constraints,
                     child_name, child_slug, child_path, summary, spec_json, result_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    project_id,
+                    run_id,
                     name,
                     goal,
                     domain,
@@ -289,9 +466,28 @@ class Storage:
             rows = conn.execute(
                 """
                 SELECT
-                    id, name, goal, domain, owner, priority, status, constraints,
-                    child_name, child_slug, child_path, summary, created_at, updated_at
+                    missions.id,
+                    missions.project_id,
+                    missions.run_id,
+                    missions.name,
+                    goal,
+                    domain,
+                    owner,
+                    priority,
+                    missions.status,
+                    constraints,
+                    child_name,
+                    child_slug,
+                    child_path,
+                    missions.summary,
+                    missions.created_at,
+                    missions.updated_at,
+                    projects.name AS project_name,
+                    projects.kind AS project_kind,
+                    mission_runs.run_key
                 FROM missions
+                LEFT JOIN projects ON projects.id = missions.project_id
+                LEFT JOIN mission_runs ON mission_runs.id = missions.run_id
                 ORDER BY id DESC
                 LIMIT ?
                 """,
@@ -309,7 +505,34 @@ class Storage:
         mission["result"] = json.loads(mission.pop("result_json"))
         mission["approvals"] = self.list_approvals(mission_id=mission_id)
         mission["artifacts"] = self.list_artifacts(mission_id=mission_id)
+        mission["project"] = self.get_project(int(mission["project_id"])) if mission.get("project_id") else None
+        mission["run"] = self.get_run(int(mission["run_id"])) if mission.get("run_id") else None
         return mission
+
+    def update_mission_links(
+        self,
+        mission_id: int,
+        *,
+        project_id: int | None = None,
+        run_id: int | None = None,
+    ) -> None:
+        fields: list[str] = []
+        params: list[Any] = []
+        if project_id is not None:
+            fields.append("project_id = ?")
+            params.append(project_id)
+        if run_id is not None:
+            fields.append("run_id = ?")
+            params.append(run_id)
+        if not fields:
+            return
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(mission_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE missions SET {', '.join(fields)} WHERE id = ?",
+                tuple(params),
+            )
 
     def add_approval(
         self,
@@ -466,6 +689,197 @@ class Storage:
                 f"UPDATE missions SET {', '.join(fields)} WHERE id = ?",
                 tuple(params),
             )
+
+    def create_run(
+        self,
+        *,
+        project_id: int,
+        mission_id: int | None,
+        run_key: str,
+        title: str,
+        status: str,
+        root_path: str,
+        summary: str,
+        spec: dict[str, Any],
+        result: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO mission_runs (
+                    project_id, mission_id, run_key, title, status, root_path,
+                    summary, spec_json, result_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    project_id,
+                    mission_id,
+                    run_key,
+                    title,
+                    status,
+                    root_path,
+                    summary,
+                    json.dumps(spec),
+                    json.dumps(result),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_runs(
+        self,
+        *,
+        project_id: int | None = None,
+        mission_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                id, project_id, mission_id, run_key, title, status, root_path,
+                summary, spec_json, result_json, created_at, updated_at
+            FROM mission_runs
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+        if project_id is not None:
+            conditions.append("project_id = ?")
+            params.append(project_id)
+        if mission_id is not None:
+            conditions.append("mission_id = ?")
+            params.append(mission_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._run_record(dict(row)) for row in rows]
+
+    def get_run(self, run_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM mission_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return None
+        return self._run_record(dict(row))
+
+    def update_run(
+        self,
+        run_id: int,
+        *,
+        mission_id: int | None = None,
+        status: str | None = None,
+        summary: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        fields: list[str] = []
+        params: list[Any] = []
+        if mission_id is not None:
+            fields.append("mission_id = ?")
+            params.append(mission_id)
+        if status is not None:
+            fields.append("status = ?")
+            params.append(status)
+        if summary is not None:
+            fields.append("summary = ?")
+            params.append(summary)
+        if result is not None:
+            fields.append("result_json = ?")
+            params.append(json.dumps(result))
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(run_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE mission_runs SET {', '.join(fields)} WHERE id = ?",
+                tuple(params),
+            )
+
+    def _run_record(self, run: dict[str, Any]) -> dict[str, Any]:
+        run["spec"] = json.loads(run.pop("spec_json"))
+        run["result"] = json.loads(run.pop("result_json"))
+        return run
+
+    def create_outcome(
+        self,
+        *,
+        project_id: int,
+        run_id: int | None,
+        name: str,
+        status: str,
+        path: str,
+        summary: str,
+        content: dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO outcomes (
+                    project_id, run_id, name, status, path, summary, content_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    project_id,
+                    run_id,
+                    name,
+                    status,
+                    path,
+                    summary,
+                    json.dumps(content),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_outcomes(
+        self,
+        *,
+        project_id: int | None = None,
+        run_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                id, project_id, run_id, name, status, path, summary, content_json,
+                created_at, updated_at
+            FROM outcomes
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+        if project_id is not None:
+            conditions.append("project_id = ?")
+            params.append(project_id)
+        if run_id is not None:
+            conditions.append("run_id = ?")
+            params.append(run_id)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._outcome_record(dict(row)) for row in rows]
+
+    def get_outcome(self, outcome_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM outcomes WHERE id = ?", (outcome_id,)).fetchone()
+        if not row:
+            return None
+        return self._outcome_record(dict(row))
+
+    def promote_outcome(self, project_id: int, outcome_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE outcomes
+                SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE project_id = ? AND id = ?
+                """,
+                ("promoted", project_id, outcome_id),
+            )
+        self.update_project(project_id, current_outcome_id=outcome_id)
+
+    def _outcome_record(self, outcome: dict[str, Any]) -> dict[str, Any]:
+        outcome["content"] = json.loads(outcome.pop("content_json"))
+        return outcome
 
     def create_learning_run(
         self,

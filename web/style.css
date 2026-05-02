@@ -95,6 +95,10 @@ button:hover {
   margin-bottom: 22px;
 }
 
+.explorer-hero {
+  align-items: start;
+}
+
 .hero-copy {
   padding: 10px 8px 10px 2px;
   align-self: end;
@@ -128,6 +132,23 @@ button:hover {
 .connector-meta,
 .stack small {
   color: var(--muted);
+}
+
+.guide-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.guide-chip {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 250, 243, 0.86);
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
 }
 
 .eyebrow {
@@ -209,9 +230,18 @@ button:hover {
 .overview-grid,
 .mission-phases,
 .detail-grid,
-.connector-options {
+.connector-options,
+.insight-grid,
+.preview-content {
   display: grid;
   gap: 14px;
+}
+
+.intake-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+  gap: 22px;
+  margin-bottom: 22px;
 }
 
 .form-grid {
@@ -224,6 +254,12 @@ label,
 .connector-choice {
   display: grid;
   gap: 8px;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
 textarea,
@@ -287,10 +323,83 @@ select:focus {
   gap: 8px;
 }
 
+.dual-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
   gap: 22px;
+}
+
+.insight-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.guide-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 243, 0.84);
+}
+
+.guide-card strong,
+.preview-block strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.guide-card p,
+.preview-block p,
+.preview-list li,
+.preview-packet {
+  margin: 0;
+  color: var(--muted);
+}
+
+.preview-panel {
+  display: grid;
+  align-content: start;
+}
+
+.preview-block {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+}
+
+.preview-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview-tag {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(21, 95, 74, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+}
+
+.preview-packet {
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: rgba(239, 228, 210, 0.42);
+  overflow-x: auto;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
 }
 
 .mission-list {
@@ -500,7 +609,12 @@ select:focus {
 @media (max-width: 1220px) {
   .app-shell,
   .hero,
+  .intake-layout,
   .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-grid {
     grid-template-columns: 1fr;
   }
 
@@ -524,7 +638,8 @@ select:focus {
   .connector-options,
   .overview-grid,
   .detail-grid,
-  .mission-phases {
+  .mission-phases,
+  .dual-actions {
     grid-template-columns: 1fr;
   }
 

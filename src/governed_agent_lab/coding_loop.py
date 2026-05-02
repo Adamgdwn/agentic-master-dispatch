@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -17,6 +18,26 @@ METRIC_KEYS = (
     "durability",
     "instruction_clarity",
     "governance",
+)
+
+OBJECTIVE_METRIC_HINTS = (
+    ("compute", ("efficiency",)),
+    ("latency", ("efficiency",)),
+    ("speed", ("efficiency",)),
+    ("cost", ("efficiency",)),
+    ("cheap", ("efficiency",)),
+    ("independent", ("logical_correctness", "durability", "instruction_clarity")),
+    ("autonomous", ("logical_correctness", "durability", "governance")),
+    ("complex", ("logical_correctness", "durability")),
+    ("complexity", ("logical_correctness", "durability")),
+    ("capability", ("logical_correctness", "durability", "instruction_clarity")),
+    ("quality", ("durability", "logical_correctness")),
+    ("reliable", ("durability", "error_elimination")),
+    ("reliability", ("durability", "error_elimination")),
+    ("regression", ("durability", "error_elimination")),
+    ("correct", ("logical_correctness", "error_elimination")),
+    ("reason", ("logical_correctness", "instruction_clarity")),
+    ("govern", ("governance",)),
 )
 
 
@@ -41,6 +62,7 @@ class CodingOptimizationLoop:
         benchmark = self._benchmark_suite(request)
         benchmark_history = self._benchmark_history(benchmark)
         lab_host_profile = self.host_profiler()
+        objective_profile = self._objective_profile(request, lab_host_profile, benchmark_history)
         codex_runner_contract = build_codex_runner_contract(lab_host_profile)
         sandbox_benchmark_suite = build_lab_host_benchmark_executor(
             self.root_path or Path.cwd(),
@@ -50,10 +72,10 @@ class CodingOptimizationLoop:
         memory = self.storage.list_memories("coding-optimization", limit=6)
         candidates = self._candidate_profiles(recent_feedback)
         attempts = [
-            self._score_candidate(index, candidate, benchmark, benchmark_history)
+            self._score_candidate(index, candidate, benchmark, benchmark_history, objective_profile)
             for index, candidate in enumerate(candidates, start=1)
         ]
-        recommended = max(attempts, key=lambda item: item["score"]["static_readiness"])
+        recommended = max(attempts, key=lambda item: item["score"]["selection_score"])
         adoption_path = [
             "Run the recommended instruction pack on a real sandbox coding benchmark corpus.",
             "Run the lab-host coding sandbox suite and archive its results before claiming improvement.",
@@ -66,6 +88,7 @@ class CodingOptimizationLoop:
             "goal": request.goal,
             "constraints": request.constraints or "Keep scope narrow, sandboxed, and reviewable.",
             "evaluation_mode": benchmark["evaluation_mode"],
+            "objective_profile": objective_profile,
             "benchmark": benchmark,
             "benchmark_history": benchmark_history,
             "lab_host_profile": lab_host_profile,
@@ -101,6 +124,7 @@ class CodingOptimizationLoop:
         }
         summary = (
             f"Recommended the '{recommended['title']}' instruction pack for sandbox coding optimization. "
+            f"Objective mode: {objective_profile['mode']}. "
             f"Lab host status: {lab_host_profile['readiness']['status']}. "
             "Promotion remains blocked at A2 until governance review."
         )
@@ -140,6 +164,67 @@ class CodingOptimizationLoop:
             "summary": summary,
             "result": result,
             "attempts": attempts,
+        }
+
+    def preview_objective_profile(
+        self,
+        goal: str,
+        constraints: str = "",
+        *,
+        host_profile: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        request = CodingOptimizationRequest(goal=goal, constraints=constraints)
+        benchmark = self._benchmark_suite(request)
+        benchmark_history = self._benchmark_history(benchmark)
+        profile = host_profile or self.host_profiler()
+        return self._objective_profile(request, profile, benchmark_history)
+
+    def _objective_profile(
+        self,
+        request: CodingOptimizationRequest,
+        lab_host_profile: dict[str, Any],
+        benchmark_history: dict[str, Any],
+    ) -> dict[str, Any]:
+        goal = request.goal.strip()
+        constraints = request.constraints.strip()
+        gain_phrase, cost_phrase = self._tradeoff_phrases(goal)
+        gain_metrics = self._phrase_metrics(gain_phrase or goal, default=("logical_correctness", "durability"))
+        cost_metrics = self._phrase_metrics(cost_phrase or constraints, default=("efficiency",)) if cost_phrase else []
+        mode = "tradeoff-optimization" if gain_phrase and cost_phrase else "capability-optimization"
+        score_basis = ["static_readiness", "benchmark_history_adjustment"]
+        if gain_metrics or cost_metrics:
+            score_basis.append("objective_alignment_adjustment")
+        return {
+            "mode": mode,
+            "goal": goal,
+            "first_evaluation_environment": lab_host_profile["hostname"],
+            "gain_target": {
+                "phrase": gain_phrase or goal,
+                "derived_metrics": gain_metrics,
+            },
+            "cost_target": {
+                "phrase": cost_phrase,
+                "derived_metrics": cost_metrics,
+            },
+            "measurement_sources": [
+                "lab host profile",
+                "sandbox benchmark suite",
+                "benchmark history",
+                "stored feedback",
+            ],
+            "selection_method": {
+                "score_basis": score_basis,
+                "tie_breaker": "Prefer higher governance and durability when scores are close.",
+            },
+            "bias_controls": [
+                "Infer score targets from the goal text and available sandbox evidence before preferring any candidate.",
+                "Treat host constraints as measurable conditions, not as permission to hardcode an outcome.",
+                "Keep tradeoff judgments reviewable so a human can challenge the chosen axes later.",
+            ],
+            "evidence_snapshot": {
+                "host_status": lab_host_profile["readiness"]["status"],
+                "prior_evaluation_count": benchmark_history["evaluation_count"],
+            },
         }
 
     def _benchmark_suite(self, request: CodingOptimizationRequest) -> dict[str, Any]:
@@ -372,6 +457,7 @@ class CodingOptimizationLoop:
         candidate: dict[str, Any],
         benchmark: dict[str, Any],
         benchmark_history: dict[str, Any],
+        objective_profile: dict[str, Any],
     ) -> dict[str, Any]:
         emphasis = candidate["emphasis"]
         case_scores = []
@@ -436,13 +522,22 @@ class CodingOptimizationLoop:
         if history_notes["risks"]:
             risks = history_notes["risks"] + risks
         metric_scores["static_readiness"] = round(metric_scores["static_readiness"] + history_adjustment, 1)
+        objective_alignment = self._objective_adjustment(metric_scores, objective_profile)
+        metric_scores["objective_fit"] = objective_alignment["objective_fit"]
+        metric_scores["objective_alignment_adjustment"] = objective_alignment["adjustment"]
+        metric_scores["selection_score"] = round(
+            metric_scores["static_readiness"] + objective_alignment["adjustment"],
+            1,
+        )
+        strengths = objective_alignment["strengths"] + strengths
+        risks = objective_alignment["risks"] + risks
         return {
             "rank": index,
             "candidate_key": candidate["candidate_key"],
             "title": candidate["title"],
             "summary": (
                 f"{candidate['title']} emphasizes durable coding behavior with a "
-                f"{metric_scores['static_readiness']} static readiness score."
+                f"{metric_scores['selection_score']} selection score."
             ),
             "score": metric_scores,
             "case_scores": case_scores,
@@ -542,6 +637,57 @@ class CodingOptimizationLoop:
             "risks": risk_notes[:2],
         }
 
+    def _objective_adjustment(
+        self,
+        metric_scores: dict[str, float],
+        objective_profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        gain_metrics = objective_profile["gain_target"]["derived_metrics"]
+        cost_metrics = objective_profile["cost_target"]["derived_metrics"]
+        strengths: list[str] = []
+        risks: list[str] = []
+
+        gain_score = self._average_metric_score(metric_scores, gain_metrics)
+        cost_score = self._average_metric_score(metric_scores, cost_metrics)
+        weighted_scores = [gain_score] if gain_score is not None else []
+        if cost_score is not None:
+            weighted_scores.append(cost_score)
+        objective_fit = round(
+            sum(weighted_scores) / len(weighted_scores),
+            1,
+        ) if weighted_scores else metric_scores["static_readiness"]
+
+        delta = objective_fit - metric_scores["static_readiness"]
+        adjustment = round(max(-3.0, min(3.0, delta * 0.25)), 1)
+
+        if gain_score is not None and gain_score >= 88.0:
+            strengths.append(
+                f"Strong gain-target alignment on {', '.join(gain_metrics)} ({gain_score})."
+            )
+        elif gain_score is not None and gain_score < 80.0:
+            risks.append(
+                f"Gain-target alignment needs more evidence on {', '.join(gain_metrics)} ({gain_score})."
+            )
+        if cost_score is not None and cost_score >= 88.0:
+            strengths.append(
+                f"Strong cost-discipline signal on {', '.join(cost_metrics)} ({cost_score})."
+            )
+        elif cost_score is not None and cost_score < 80.0:
+            risks.append(
+                f"Cost-discipline signal needs more evidence on {', '.join(cost_metrics)} ({cost_score})."
+            )
+        if objective_profile["mode"] == "tradeoff-optimization":
+            strengths.append(
+                f"Tradeoff scoring derived from goal phrases, not a fixed operator-selected benchmark target."
+            )
+
+        return {
+            "objective_fit": objective_fit,
+            "adjustment": adjustment,
+            "strengths": strengths[:2],
+            "risks": risks[:2],
+        }
+
     def _gate_failures(self, metric_scores: dict[str, float], score_gates: dict[str, float]) -> list[str]:
         gate_to_metric = {
             "error_elimination_min": "error_elimination",
@@ -573,6 +719,45 @@ class CodingOptimizationLoop:
         if positive:
             return f"Strong {label} signal ({value})."
         return f"{label.title()} needs more evidence ({value})."
+
+    def _tradeoff_phrases(self, goal: str) -> tuple[str | None, str | None]:
+        lowered = " ".join(goal.lower().split())
+        patterns = [
+            r"(?P<gain>.+?)\s+with\s+less\s+(?P<cost>.+)",
+            r"(?P<gain>.+?)\s+with\s+lower\s+(?P<cost>.+)",
+            r"(?P<gain>.+?)\s+using\s+less\s+(?P<cost>.+)",
+            r"(?P<gain>.+?)\s+while\s+reducing\s+(?P<cost>.+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, lowered)
+            if match:
+                gain = self._clean_phrase(match.group("gain"))
+                cost = self._clean_phrase(match.group("cost"))
+                if gain and cost:
+                    return gain, cost
+        return None, None
+
+    def _phrase_metrics(self, phrase: str, *, default: tuple[str, ...]) -> list[str]:
+        lowered = phrase.lower()
+        derived: list[str] = []
+        for hint, metrics in OBJECTIVE_METRIC_HINTS:
+            if hint in lowered:
+                for metric in metrics:
+                    if metric not in derived:
+                        derived.append(metric)
+        if derived:
+            return derived
+        return list(default)
+
+    def _average_metric_score(self, metric_scores: dict[str, float], metrics: list[str]) -> float | None:
+        values = [metric_scores[metric] for metric in metrics if metric in metric_scores]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 1)
+
+    def _clean_phrase(self, value: str) -> str:
+        cleaned = re.sub(r"^[^a-z0-9]+|[^a-z0-9]+$", "", value.strip())
+        return " ".join(cleaned.split())
 
     def _reasoning_seeds(self, benchmark: dict[str, Any]) -> list[dict[str, str]]:
         seeds = []

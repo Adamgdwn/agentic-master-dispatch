@@ -16,9 +16,12 @@ This repository contains a governed agent project for mission intake, governed c
 
 - The app now behaves like a boss-agent mission console instead of a simple task runner.
 - Missions create isolated child workspaces automatically under `children/`.
+- Governed projects now act as durable containers, while each mission gets a fresh isolated run workspace and outcomes are preserved separately.
 - Mission state, approvals, and artifacts are persisted in SQLite for reviewable workflows.
 - The GUI now centers on mission intake, mission queue, approval cards, connector readiness, and mission detail.
+- The desktop app now opens into a hard-coded exploratory intake that keeps mission intent, constraints, evidence rules, and operator hunches separated before mission creation.
 - Coding-optimization missions now generate benchmark suites, instruction candidates, and promotion gates for sandbox AI coder improvement work.
+- Coding-optimization missions now derive a neutral objective profile from broad goals such as improving one capability while reducing another cost, instead of requiring hand-shaped trial instructions.
 - Prerequisite-reasoning benchmarks can now grade concrete answers and persist the evaluation results for later tuning.
 - Coding-optimization runs now profile the local lab host and generate a Codex runner contract for host-aware sandbox benchmarking.
 - The server can now expose and execute a local sandbox benchmark suite for a lab host such as Chuwi, with results persisted for review.
@@ -28,8 +31,8 @@ This repository contains a governed agent project for mission intake, governed c
 
 ## Build Snapshot
 
-- Product direction: a boss agent that receives a mission, opens a governed child workspace, and controls approvals before execution.
-- Current state: mission intake, child bootstrap, approval records, artifact tracking, a sandbox coding-optimization loop, lab-host profiling, and a cleaner GUI are implemented.
+- Product direction: a boss agent that receives a mission, attaches it to a governed project, opens an isolated run workspace, and controls approvals before execution.
+- Current state: exploratory intake, governed project containers, isolated run workspaces, approval records, artifact tracking, a sandbox coding-optimization loop with neutral objective parsing, lab-host profiling, and a cleaner GUI are implemented.
 - Not implemented yet: real post-approval child execution, real benchmark execution inside child workspaces, per-child connector loading, and packaged native desktop distribution.
 - Repo URL: `https://github.com/Adamgdwn/agentic-master-dispatch`
 
@@ -47,10 +50,22 @@ This repository contains a governed agent project for mission intake, governed c
    ./GovernedAgentLab.command
    ```
 
+   On Linux, use:
+
+   ```bash
+   ./GovernedAgentLab.sh
+   ```
+
+   To install a menu launcher on Xubuntu, Pop!_OS, or similar Linux desktops:
+
+   ```bash
+   bash scripts/install-linux-launcher.sh
+   ```
+
 3. The launcher now opens a native desktop window when `pywebview` is installed. If the desktop shell is unavailable, it falls back to your browser at `http://127.0.0.1:8000`.
 4. Install or refresh desktop support with a Python that has `pip` available, for example `~/.pyenv/versions/3.12.1/bin/python -m pip install -r requirements.txt`.
 5. Configure connectors with `config/secrets.example.env` and `config/tool-profiles.toml` before enabling external tools.
-6. Use the boss-agent interface to define a mission, set constraints, request connectors, and create a governed child workspace automatically.
+6. Use the boss-agent interface to define a mission, attach it to a governed project, and create an isolated run workspace automatically.
 7. Do not add broker access, exchange credentials, or live execution without reclassification and updated approvals.
 8. Use the `Coding Optimization` domain for sandbox instruction-pack experiments that target Codex or Claude Code style agents.
 9. Inspect the current lab host profile at `GET /api/lab-host/profile` when preparing a machine such as Chuwi for sandbox coding benchmarks.
@@ -75,7 +90,7 @@ This repository contains a governed agent project for mission intake, governed c
 1. Add real child execution flows after approval, not just mission packaging and child bootstrap.
 2. Replace static readiness scoring as the primary score with instruction-pack trials against the executable lab benchmark suite.
 3. Implement per-child connector enablement so approved missions can load only the env vars and tools they were granted.
-4. Add mission actions such as `start`, `pause`, `archive`, and `complete`, with clearer lifecycle transitions in the UI.
+4. Add project, run, and outcome actions such as `start`, `pause`, `archive`, `promote`, and `complete`, with clearer lifecycle transitions in the UI.
 5. Improve the desktop experience further by packaging the launcher into a more native app bundle.
 6. Add richer artifact generation and logs so each child returns execution evidence, not just kickoff files.
 7. Update model and prompt registries once the real connector-backed execution path is finalized.

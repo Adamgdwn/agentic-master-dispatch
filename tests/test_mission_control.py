@@ -27,10 +27,13 @@ class MissionControlTests(unittest.TestCase):
             self.assertEqual(mission["status"], "awaiting-approval")
             self.assertEqual(mission["name"], "Notes Lab")
             self.assertTrue(Path(mission["child_path"]).exists())
+            self.assertIsNotNone(mission["project"])
+            self.assertIsNotNone(mission["run"])
             self.assertEqual(len(mission["approvals"]), 2)
             self.assertGreaterEqual(len(mission["artifacts"]), 4)
             self.assertTrue(any(item["artifact_type"] == "manifest" for item in mission["artifacts"]))
             self.assertEqual(mission["spec"]["child"]["requested_connectors"], ["openai"])
+            self.assertIn("/workspace/runs/", mission["child_path"])
 
     def test_approving_all_items_moves_mission_to_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -52,6 +55,39 @@ class MissionControlTests(unittest.TestCase):
             self.assertIsNotNone(mission)
             assert mission is not None
             self.assertEqual(mission["status"], "ready")
+
+    def test_same_project_gets_new_isolated_run_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            storage = Storage(repo_root / "agent.db")
+            control = MissionControl(storage, ChildProjectBootstrapper(repo_root))
+
+            first = control.create_mission(
+                MissionRequest(
+                    goal="Explore a governed app concept",
+                    domain="research-and-development",
+                    project_name="Shared Lab",
+                    mission_name="Shared Lab Alpha",
+                )
+            )
+            second = control.create_mission(
+                MissionRequest(
+                    goal="Iterate on the same governed app concept",
+                    domain="research-and-development",
+                    project_name="Shared Lab",
+                    mission_name="Shared Lab Beta",
+                )
+            )
+
+            self.assertEqual(first["project"]["id"], second["project"]["id"])
+            self.assertEqual(first["project"]["root_path"], second["project"]["root_path"])
+            self.assertNotEqual(first["run"]["id"], second["run"]["id"])
+            self.assertNotEqual(first["run"]["root_path"], second["run"]["root_path"])
+            self.assertNotEqual(first["child_path"], second["child_path"])
+            self.assertTrue(Path(first["run"]["root_path"]).exists())
+            self.assertTrue(Path(second["run"]["root_path"]).exists())
+            self.assertEqual(len(storage.list_projects()), 1)
+            self.assertEqual(len(storage.list_runs(project_id=first["project"]["id"])), 2)
 
 
 if __name__ == "__main__":

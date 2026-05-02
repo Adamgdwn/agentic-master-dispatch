@@ -2,14 +2,17 @@
 
 ## Summary
 
-The system operates as a governed boss agent with specialist child workspaces and role plans. It receives a mission, creates an isolated governed child folder, assigns a scoped execution plan, requests approvals when connectors or elevated access are needed, and produces artifacts for human review. Trading strategy work and sandbox coding-optimization work are supported profiles, and no live execution path is currently approved.
+The system operates as a governed boss agent with specialist project containers, isolated run workspaces, and role plans. It receives a mission, attaches it to a governed project, creates a fresh run workspace, assigns a scoped execution plan, requests approvals when connectors or elevated access are needed, and produces artifacts for human review. Trading strategy work and sandbox coding-optimization work are supported profiles, and no live execution path is currently approved.
 
 ## Components
 
 - Boss agent: receives missions, clarifies scope, creates child workspaces, and enforces governance.
+- Project store: persists durable governed projects that may receive many missions over time.
 - Mission store: persists mission briefs, statuses, approvals, and artifact timelines.
+- Run store: persists isolated run workspaces so new work does not overwrite prior work.
+- Outcome store: persists draft or promoted results separately from future runs.
 - Approval gate: tracks connector, secret, and scope approvals before a child may proceed.
-- Child workspace bootstrapper: creates isolated folders with local governance docs and working files.
+- Workspace bootstrapper: creates governed project roots and isolated run folders with local governance docs and working files.
 - Planner agent: decomposes work into research, data, strategy, review, and promotion stages.
 - Research agent: gathers read-only market, strategy, and reference inputs.
 - Data agent: prepares large historical datasets and validation slices.
@@ -29,7 +32,7 @@ The system operates as a governed boss agent with specialist child workspaces an
 
 ## Data Flow
 
-Inputs enter from user missions, local configuration, and approved read-only data sources. The boss agent creates a mission package, opens an isolated child workspace, writes initial artifacts, and assigns role handoffs inside a sandboxed environment. Coding-optimization missions additionally generate benchmark definitions, instruction packs, lab-host profiles, Codex runner contracts, executable sandbox benchmark suites, and promotion blockers so any future autonomy proposal stays reviewable. Only reviewed candidates may move into paper trading, and no approved flow exists from this system to real brokerage or exchange execution.
+Inputs enter from user missions, local configuration, and approved read-only data sources. The boss agent creates a mission package, attaches it to a governed project, opens an isolated run workspace, writes initial artifacts, and assigns role handoffs inside a sandboxed environment. Coding-optimization missions additionally generate benchmark definitions, instruction packs, lab-host profiles, Codex runner contracts, executable sandbox benchmark suites, and promotion blockers so any future autonomy proposal stays reviewable. Only reviewed candidates may move into paper trading, and no approved flow exists from this system to real brokerage or exchange execution.
 
 ## Dependencies
 
@@ -44,7 +47,8 @@ Inputs enter from user missions, local configuration, and approved read-only dat
 - Current approval boundary stops at mission intake, governed child execution, research, simulation, sandbox execution, and paper-trade preparation.
 - The project is classified as high risk because it is an agentic financial system with potential to affect money-related decisions.
 - Autonomy is capped at A2 while the system is limited to bounded sandbox actions with logging and human review.
-- Child workspaces are isolated from one another and require explicit approval for connector access.
+- Project containers are durable, while run workspaces are isolated from one another and require explicit approval for connector access.
+- Outcomes should be promoted explicitly instead of replacing prior results in place.
 - Strategy generation and deployment are explicitly separated.
 - Coding-agent instruction packs may be iterated inside the sandbox, but promotion beyond A2 still requires governance review.
 - Local lab hosts such as Chuwi may be profiled and used for sandbox benchmark execution, but that does not widen autonomy or approve external writes.

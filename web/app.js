@@ -3,8 +3,12 @@ const state = {
   loadedEnvKeys: [],
   learningRuns: [],
   missions: [],
+  projects: [],
+  runs: [],
+  outcomes: [],
   pendingApprovals: [],
   currentMissionId: null,
+  preview: null,
 };
 
 function escapeHtml(value) {
@@ -29,6 +33,52 @@ function renderStatusPill(status) {
   return `<span class="status-pill status-${safeStatus.toLowerCase()}">${safeStatus}</span>`;
 }
 
+function debounce(fn, delayMs) {
+  let timeoutId = null;
+  return (...args) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => fn(...args), delayMs);
+  };
+}
+
+function collectExplorationFormData() {
+  return {
+    goal: document.getElementById("goal").value.trim(),
+    domain: document.getElementById("domain").value,
+    project_name: document.getElementById("project-name").value.trim(),
+    project_kind: document.getElementById("project-kind").value,
+    mission_name: document.getElementById("mission-name").value.trim(),
+    owner: document.getElementById("owner").value.trim(),
+    priority: document.getElementById("priority").value,
+    hard_constraints: document.getElementById("hard-constraints").value.trim(),
+    available_environment: document.getElementById("available-environment").value.trim(),
+    evidence_requirements: document.getElementById("evidence-requirements").value.trim(),
+    operator_hunches: document.getElementById("operator-hunches").value.trim(),
+    disallowed_assumptions: document.getElementById("disallowed-assumptions").value.trim(),
+    requested_connectors: Array.from(document.querySelectorAll('input[name="connector"]:checked')).map((input) => input.value),
+  };
+}
+
+function composeMissionConstraints(formData) {
+  const sections = [
+    ["Hard Constraints", formData.hard_constraints],
+    ["Available Environment", formData.available_environment],
+    ["Evidence Requirements", formData.evidence_requirements],
+    [
+      "Operator Hunches",
+      formData.operator_hunches
+        ? `Treat these as operator hypotheses for exploration, not as the scoring rule unless later approved.\n${formData.operator_hunches}`
+        : "",
+    ],
+    ["Disallowed Assumptions", formData.disallowed_assumptions],
+  ];
+
+  return sections
+    .filter(([, content]) => content)
+    .map(([title, content]) => `${title}:\n${content}`)
+    .join("\n\n");
+}
+
 async function fetchState() {
   const response = await fetch("/api/state");
   const payload = await response.json();
@@ -36,10 +86,20 @@ async function fetchState() {
   state.loadedEnvKeys = payload.loaded_env_keys || [];
   state.learningRuns = payload.learning_runs || [];
   state.missions = payload.missions || [];
+  state.projects = payload.projects || [];
+  state.runs = payload.runs || [];
+  state.outcomes = payload.outcomes || [];
   state.pendingApprovals = payload.pending_approvals || [];
 
   renderProject(payload.project || {});
-  renderOverview(payload.project || {}, state.missions, state.pendingApprovals, payload.children || [], state.learningRuns);
+  renderOverview(
+    payload.project || {},
+    state.missions,
+    state.pendingApprovals,
+    state.projects,
+    state.runs,
+    state.outcomes
+  );
   renderConnectorChoices(state.connectors);
   renderConnectors(state.connectors, state.loadedEnvKeys);
   renderApprovalQueue(state.pendingApprovals);
@@ -66,13 +126,14 @@ function renderProject(project) {
   document.getElementById("scope-badge").textContent = project.autonomy_level || "A2";
 }
 
-function renderOverview(project, missions, approvals, children, learningRuns) {
+function renderOverview(project, missions, approvals, projects, runs, outcomes) {
   const container = document.getElementById("overview-grid");
   const cards = [
+    ["Projects", projects.length],
     ["Missions", missions.length],
+    ["Runs", runs.length],
+    ["Outcomes", outcomes.length],
     ["Approvals", approvals.length],
-    ["Children", children.length],
-    ["Learning Runs", learningRuns.length],
     ["Risk", project.risk_tier || "high"],
   ];
   container.innerHTML = cards
@@ -169,7 +230,7 @@ function renderMissionList(missions) {
   const container = document.getElementById("mission-list");
   container.innerHTML = "";
   if (!missions.length) {
-    container.innerHTML = `<div class="detail-card"><strong>No missions yet</strong><small>Create a mission to have the boss agent open a governed child workspace.</small></div>`;
+    container.innerHTML = `<div class="detail-card"><strong>No missions yet</strong><small>Use the exploratory intake above to open the first governed mission.</small></div>`;
     return;
   }
 
@@ -186,6 +247,7 @@ function renderMissionList(missions) {
         ${renderStatusPill(mission.status)}
       </div>
       <div class="mission-meta">${escapeHtml(mission.domain)} · ${escapeHtml(mission.priority)}</div>
+      <div class="mission-meta">${escapeHtml(mission.project_name || "Unlinked Project")} · ${escapeHtml(mission.run_key || "Run pending")}</div>
       <div class="mission-meta">${escapeHtml(mission.summary)}</div>
       <div class="mission-meta">${escapeHtml(mission.child_name)} · ${escapeHtml(mission.child_path)}</div>
     `;
@@ -212,6 +274,8 @@ function renderMissionDetail(mission) {
   const result = mission.result || {};
   const brief = result.brief || {};
   const child = mission.spec?.child || result.child || {};
+  const project = mission.project || mission.spec?.project || result.project || {};
+  const run = mission.run || mission.spec?.run || result.run || {};
   const approvals = mission.approvals || [];
   const phases = result.phases || [];
   const artifacts = mission.artifacts || [];
@@ -228,13 +292,23 @@ function renderMissionDetail(mission) {
     `
   );
 
-  const childCard = detailCard(
-    "Child Workspace",
+  const projectCard = detailCard(
+    "Project Container",
     `
-      <p><strong>${escapeHtml(child.name || mission.child_name)}</strong></p>
-      <p class="path-block">${escapeHtml(child.path || mission.child_path)}</p>
+      <p><strong>${escapeHtml(project.name || "Not linked")}</strong></p>
+      <p><strong>Kind</strong><br />${escapeHtml(project.kind || "project")}</p>
+      <p class="path-block">${escapeHtml(project.root_path || project.path || "")}</p>
+      <p><strong>Current Outcome</strong><br />${escapeHtml(project.current_outcome?.name || "None promoted yet")}</p>
+    `
+  );
+
+  const runCard = detailCard(
+    "Run Workspace",
+    `
+      <p><strong>${escapeHtml(run.run_key || run.key || child.slug || mission.child_slug)}</strong></p>
+      <p class="path-block">${escapeHtml(run.root_path || run.path || child.path || mission.child_path)}</p>
       <p><strong>Requested Connectors</strong><br />${escapeHtml((child.requested_connectors || []).join(", ") || "None")}</p>
-      <p><strong>Goal Brief</strong><br />${escapeHtml(child.goal_path || "workspace/goal.md")}</p>
+      <p><strong>Goal Brief</strong><br />${escapeHtml(run.spec?.goal_path || run.goal_path || child.goal_path || "workspace/goal.md")}</p>
     `
   );
 
@@ -329,8 +403,9 @@ function renderMissionDetail(mission) {
   container.innerHTML = `
     <div class="detail-grid">
       ${summaryCard}
-      ${childCard}
+      ${projectCard}
     </div>
+    ${runCard}
     ${approvalsCard}
     ${phasesCard}
     ${artifactsCard}
@@ -340,6 +415,90 @@ function renderMissionDetail(mission) {
   container.querySelectorAll("[data-approval-id]").forEach((button) => {
     button.addEventListener("click", () => updateApproval(Number(button.dataset.approvalId), button.dataset.status));
   });
+}
+
+function renderPreview(preview) {
+  const modeBadge = document.getElementById("preview-mode");
+  const container = document.getElementById("preview-content");
+
+  if (!preview) {
+    modeBadge.textContent = "Waiting";
+    container.className = "preview-content empty-state";
+    container.textContent = "Fill in the exploration brief to preview how the agent will frame the mission before any mission is created.";
+    return;
+  }
+
+  const objective = preview.objective_profile || {};
+  const gainTarget = objective.gain_target || {};
+  const costTarget = objective.cost_target || {};
+  const uniqueMetrics = Array.from(
+    new Set([...(gainTarget.derived_metrics || []), ...(costTarget.derived_metrics || [])])
+  );
+  const unresolved = preview.unresolved_questions || [];
+  const biasControls = preview.bias_controls || [];
+  const missionPacket = preview.mission_packet || {};
+
+  modeBadge.textContent = formatLabel(objective.mode || "preview");
+  container.className = "preview-content";
+  container.innerHTML = `
+    <article class="preview-block fade-in">
+      <strong>Derived Objective</strong>
+      <p>${escapeHtml(missionPacket.goal || "")}</p>
+      <div class="preview-tags">
+        <span class="preview-tag">Mode: ${escapeHtml(formatLabel(objective.mode || "unknown"))}</span>
+        <span class="preview-tag">Domain: ${escapeHtml(formatLabel(preview.domain || "unknown"))}</span>
+        <span class="preview-tag">Host: ${escapeHtml(objective.first_evaluation_environment || "unknown")}</span>
+      </div>
+    </article>
+
+    <article class="preview-block fade-in">
+      <strong>Candidate Dimensions</strong>
+      <ul class="preview-list">
+        <li><strong>Improve:</strong> ${escapeHtml(gainTarget.phrase || missionPacket.goal || "Not derived yet")}</li>
+        <li><strong>Reduce:</strong> ${escapeHtml(costTarget.phrase || "No explicit cost phrase detected yet")}</li>
+      </ul>
+      <div class="preview-tags">
+        ${uniqueMetrics.length
+          ? uniqueMetrics.map((metric) => `<span class="preview-tag">${escapeHtml(formatLabel(metric))}</span>`).join("")
+          : `<span class="preview-tag">Metrics still ambiguous</span>`}
+      </div>
+    </article>
+
+    <article class="preview-block fade-in">
+      <strong>Bias Controls</strong>
+      <ul class="preview-list">
+        ${biasControls.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </article>
+
+    <article class="preview-block fade-in">
+      <strong>Unresolved Questions</strong>
+      <ul class="preview-list">
+        ${
+          unresolved.length
+            ? unresolved.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+            : "<li>The intake is specific enough for a governed mission packet.</li>"
+        }
+      </ul>
+    </article>
+
+    <article class="preview-block fade-in">
+      <strong>Mission Packet Sent To The Agent</strong>
+      <pre class="preview-packet">${escapeHtml(
+        JSON.stringify(
+          {
+            project_name: missionPacket.project_name || "",
+            project_kind: missionPacket.project_kind || "",
+            goal: missionPacket.goal || "",
+            domain: missionPacket.domain || "",
+            constraints: missionPacket.constraints || "",
+          },
+          null,
+          2
+        )
+      )}</pre>
+    </article>
+  `;
 }
 
 async function loadMission(missionId, shouldScroll) {
@@ -353,19 +512,57 @@ async function loadMission(missionId, shouldScroll) {
   }
 }
 
+async function requestPreview(showStatus = true) {
+  const status = document.getElementById("preview-status");
+  const formData = collectExplorationFormData();
+
+  if (!formData.goal) {
+    state.preview = null;
+    renderPreview(null);
+    status.textContent = "Add a mission to generate a framing preview.";
+    return;
+  }
+
+  if (showStatus) {
+    status.textContent = "Deriving objective framing...";
+  }
+
+  const response = await fetch("/api/exploration/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(formData),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    status.textContent = payload.error || "Unable to derive a preview.";
+    return;
+  }
+
+  state.preview = payload.preview;
+  renderPreview(payload.preview);
+  status.textContent = "Preview updated.";
+}
+
 async function submitMission(event) {
   event.preventDefault();
   const status = document.getElementById("mission-status");
+  const formData = collectExplorationFormData();
+  if (!formData.goal) {
+    status.textContent = "Mission is required.";
+    return;
+  }
+
   status.textContent = "Opening governed mission...";
-  const requestedConnectors = Array.from(document.querySelectorAll('input[name="connector"]:checked')).map((input) => input.value);
   const body = {
-    mission_name: document.getElementById("mission-name").value.trim(),
-    goal: document.getElementById("goal").value.trim(),
-    domain: document.getElementById("domain").value,
-    owner: document.getElementById("owner").value.trim(),
-    priority: document.getElementById("priority").value,
-    constraints: document.getElementById("constraints").value.trim(),
-    requested_connectors: requestedConnectors,
+    mission_name: formData.mission_name,
+    project_name: formData.project_name,
+    project_kind: formData.project_kind,
+    goal: formData.goal,
+    domain: formData.domain,
+    owner: formData.owner,
+    priority: formData.priority,
+    constraints: composeMissionConstraints(formData),
+    requested_connectors: formData.requested_connectors,
   };
   const response = await fetch("/api/missions", {
     method: "POST",
@@ -378,7 +575,6 @@ async function submitMission(event) {
     return;
   }
   status.textContent = "Mission created.";
-  document.getElementById("mission-form").reset();
   state.currentMissionId = payload.mission.id;
   await fetchState();
 }
@@ -402,6 +598,16 @@ async function reloadEnv() {
   await fetchState();
 }
 
+const schedulePreview = debounce(() => {
+  requestPreview(false);
+}, 360);
+
 document.getElementById("mission-form").addEventListener("submit", submitMission);
 document.getElementById("reload-env").addEventListener("click", reloadEnv);
-fetchState();
+document.getElementById("preview-button").addEventListener("click", () => requestPreview(true));
+document.querySelectorAll("#mission-form textarea, #mission-form input, #mission-form select").forEach((element) => {
+  const eventName = element.tagName === "SELECT" ? "change" : "input";
+  element.addEventListener(eventName, schedulePreview);
+});
+
+fetchState().then(() => requestPreview(false));

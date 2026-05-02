@@ -3,8 +3,11 @@
 ## What This Project Is
 
 Governed Agent Lab is a mission console for bounded agent work. It creates governed child workspaces, records approvals and artifacts, runs sandbox-only research or coding-optimization flows, and keeps the work reviewable.
+Governed projects now hold long-lived work, while each mission gets a fresh run workspace so exploration does not overwrite previous results.
 
 For coding-optimization missions, the system now also profiles the local lab host, generates a Codex runner contract, and defines an executable local benchmark suite before any claim of improvement is accepted.
+It can also derive a neutral objective profile from broad tradeoff goals so the operator does not need to pre-bake the evaluation target into the mission wording.
+The desktop landing experience starts with a hard-coded exploratory intake so the operator can state a mission, hard constraints, evidence requirements, and separate hunches before opening a governed mission.
 
 ## How To Work In This Repo
 
@@ -20,8 +23,8 @@ For coding-optimization missions, the system now also profiles the local lab hos
 ### Mission Intake
 
 1. Open the app.
-2. Create a mission with a domain, goal, and constraints.
-3. Review the generated child workspace, approvals, and kickoff artifacts.
+2. Choose or name a governed project, then create a mission with a domain, goal, and constraints.
+3. Review the generated run workspace, approvals, and kickoff artifacts.
 4. Clear approvals before treating a mission as ready.
 
 ### Coding Optimization

@@ -24,6 +24,26 @@ class ChildProjectRequest:
     constraints: str
 
 
+@dataclass
+class GovernedProjectRequest:
+    name: str
+    domain: str
+    owner: str
+    purpose: str
+    constraints: str = ""
+    kind: str = "project"
+
+
+@dataclass
+class GovernedRunRequest:
+    project_slug: str
+    mission_name: str
+    goal: str
+    domain: str
+    owner: str
+    constraints: str
+
+
 class ChildProjectBootstrapper:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
@@ -43,6 +63,88 @@ class ChildProjectBootstrapper:
                     }
                 )
         return children
+
+    def ensure_project(self, request: GovernedProjectRequest) -> dict[str, str]:
+        if not request.name.strip():
+            raise ValueError("Project name is required")
+        if request.domain not in DOMAIN_PROFILES:
+            raise ValueError("Unknown domain")
+
+        profile = DOMAIN_PROFILES[request.domain]
+        slug = slugify(request.name)
+        project_root = self.children_root / slug
+        if not project_root.exists():
+            child_request = ChildProjectRequest(
+                name=request.name,
+                goal=request.purpose,
+                domain=request.domain,
+                owner=request.owner,
+                constraints=request.constraints,
+            )
+            self._make_dirs(project_root)
+            self._write(project_root / "README.md", self._project_readme(request, profile))
+            self._write(project_root / "AGENTS.md", self._agents())
+            self._write(project_root / "project-control.yaml", self._project_control(child_request, slug, profile))
+            self._write(project_root / "docs/architecture.md", self._project_architecture(request, profile))
+            self._write(project_root / "docs/deployment-guide.md", self._project_deployment())
+            self._write(project_root / "docs/runbook.md", self._runbook())
+            self._write(project_root / "docs/CHANGELOG.md", self._changelog())
+            self._write(project_root / "config/secrets.example.env", self._secrets_example())
+            self._write(project_root / "config/tool-profiles.toml", self._tool_profiles())
+            self._write(project_root / "docs/agent-inventory.md", self._project_agent_inventory(request))
+            self._write(project_root / "docs/model-registry.md", self._model_registry())
+            self._write(project_root / "docs/prompt-register.md", self._project_prompt_register(request))
+            self._write(project_root / "docs/tool-permission-matrix.md", self._tool_matrix())
+            self._write(project_root / "docs/evaluation-approach.md", self._evaluation())
+            self._write(project_root / "docs/human-oversight-rules.md", self._oversight())
+            self._write(project_root / "docs/risks/risk-register.md", self._risk_register(child_request))
+            self._write(project_root / "scripts/governance-check.sh", self._governance_check())
+            self._write(project_root / "scripts/governance-preflight.sh", self._governance_preflight())
+            self._write(project_root / "workspace/goal.md", self._project_goal_brief(request, profile))
+            self._write(project_root / "workspace/registry.md", self._project_registry_markdown(request, profile))
+            self._write(project_root / "workspace/outcomes/README.md", self._outcomes_readme())
+            self._write(project_root / "workspace/runs/README.md", self._runs_readme())
+
+        return {
+            "name": request.name,
+            "slug": slug,
+            "path": str(project_root),
+            "goal_path": str(project_root / "workspace/goal.md"),
+            "kind": request.kind,
+        }
+
+    def create_run_workspace(self, request: GovernedRunRequest) -> dict[str, str]:
+        if request.domain not in DOMAIN_PROFILES:
+            raise ValueError("Unknown domain")
+
+        project_root = self.children_root / request.project_slug
+        if not project_root.exists():
+            raise FileNotFoundError(f"Governed project does not exist: {request.project_slug}")
+
+        run_key = self._reserve_run_key(project_root, request.mission_name or request.goal)
+        run_root = project_root / "workspace" / "runs" / run_key
+        profile = DOMAIN_PROFILES[request.domain]
+
+        for rel in [
+            ".",
+            "artifacts",
+            "approvals",
+            "outputs",
+        ]:
+            (run_root / rel).mkdir(parents=True, exist_ok=True)
+
+        goal_path = run_root / "goal.md"
+        goal_path.write_text(
+            self._run_goal_brief(request, profile, run_key),
+            encoding="utf-8",
+        )
+        return {
+            "name": f"{request.mission_name or 'Mission'} Run",
+            "slug": run_key,
+            "run_key": run_key,
+            "path": str(run_root),
+            "goal_path": str(goal_path),
+        }
 
     def create_child(self, request: ChildProjectRequest) -> dict[str, str]:
         if not request.name.strip() or not request.goal.strip():
@@ -84,6 +186,17 @@ class ChildProjectBootstrapper:
             "goal_path": str(child_root / "workspace/goal.md"),
         }
 
+    def _reserve_run_key(self, project_root: Path, base_name: str) -> str:
+        runs_root = project_root / "workspace" / "runs"
+        runs_root.mkdir(parents=True, exist_ok=True)
+        base_slug = slugify(base_name)[:32] or "mission"
+        index = 1
+        while True:
+            run_key = f"run-{index:03d}-{base_slug}"
+            if not (runs_root / run_key).exists():
+                return run_key
+            index += 1
+
     def _make_dirs(self, root: Path) -> None:
         for rel in [
             "config",
@@ -94,6 +207,8 @@ class ChildProjectBootstrapper:
             "workspace",
             "workspace/artifacts",
             "workspace/approvals",
+            "workspace/runs",
+            "workspace/outcomes",
             "src",
             "tests",
         ]:
@@ -134,6 +249,32 @@ This child agent workspace was spawned from Governed Agent Lab. Its purpose is t
 ## Parentage
 
 This project inherits governance conventions from the parent lab. New tools, model changes, or expanded autonomy require local documentation and review before use.
+"""
+
+    def _project_readme(self, request: GovernedProjectRequest, profile: dict[str, object]) -> str:
+        return f"""# {request.name}
+
+## Purpose
+
+This governed project is a durable container for related missions, isolated runs, and explicit outcome promotion.
+
+## Project Summary
+
+- Kind: {request.kind}
+- Domain: {profile['label']}
+- Owner: {request.owner or 'Unassigned'}
+- Status: Not approved for production or money movement
+- Maximum approved autonomy: A2 in sandboxed environments only
+
+## Working Model
+
+- Missions are requests made against this project.
+- Runs are isolated workspaces created per mission so new work does not overwrite prior work.
+- Outcomes are reviewable results that may be promoted explicitly after human review.
+
+## Current Purpose
+
+{request.purpose}
 """
 
     def _agents(self) -> str:
@@ -242,6 +383,25 @@ This child workspace focuses on {profile['label']} under the goal below:
 Inputs should remain governed, minimal, and reproducible. External write access is out of scope until documented and approved.
 """
 
+    def _project_architecture(self, request: GovernedProjectRequest, profile: dict[str, object]) -> str:
+        return f"""# Architecture Overview
+
+## Summary
+
+This governed project manages a long-lived body of work in {profile['label']}. Missions create isolated runs, and runs produce outcomes that may be reviewed and promoted without overwriting prior work.
+
+## Components
+
+- Project root governance documents in `docs/`
+- Project purpose and registry in `workspace/`
+- Isolated run workspaces in `workspace/runs/`
+- Promoted outcomes in `workspace/outcomes/`
+
+## Data Flow
+
+The project receives mission requests, allocates a fresh run workspace, captures run artifacts, and preserves outcomes separately from future work. External write access remains out of scope until documented and approved.
+"""
+
     def _deployment(self) -> str:
         return """# Deployment Guide
 
@@ -251,6 +411,17 @@ Inputs should remain governed, minimal, and reproducible. External write access 
 - `sandbox`
 
 No production deployment is approved for this child workspace by default.
+"""
+
+    def _project_deployment(self) -> str:
+        return """# Deployment Guide
+
+## Environments
+
+- `dev`
+- `sandbox`
+
+Project work must stay in governed sandbox environments. Each mission should execute in its own run workspace, and outcomes should be promoted only after review.
 """
 
     def _runbook(self) -> str:
@@ -324,6 +495,14 @@ notes = "Use approved research snapshots only."
 | AG-001 | {request.name} | Child agent spawned for a specific governed goal. | A2 | See model registry | {request.owner or 'Unassigned'} | Draft |
 """
 
+    def _project_agent_inventory(self, request: GovernedProjectRequest) -> str:
+        return f"""# Agent Inventory
+
+| Agent ID | Name | Purpose | Autonomy | Model | Owner | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| AG-001 | {request.name} | Governed project container for missions, isolated runs, and reviewable outcomes. | A2 | See model registry | {request.owner or 'Unassigned'} | Active prototype |
+"""
+
     def _model_registry(self) -> str:
         return """# Model Registry
 
@@ -338,6 +517,14 @@ notes = "Use approved research snapshots only."
 | Prompt ID | Agent | Purpose | Current Version | Change Type | Last Reviewed |
 | --- | --- | --- | --- | --- | --- |
 | P-001 | {request.name} | Goal intake and execution guidance for the child workspace | v1 | Initial child bootstrap | 2026-03-22 |
+"""
+
+    def _project_prompt_register(self, request: GovernedProjectRequest) -> str:
+        return f"""# Prompt Register
+
+| Prompt ID | Agent | Purpose | Current Version | Change Type | Last Reviewed |
+| --- | --- | --- | --- | --- | --- |
+| P-001 | {request.name} | Mission intake, run isolation, and outcome governance for the project workspace | v1 | Initial governed project bootstrap | 2026-03-22 |
 """
 
     def _tool_matrix(self) -> str:
@@ -409,6 +596,72 @@ notes = "Use approved research snapshots only."
 ## Constraints
 
 {request.constraints or 'Stay simple, governed, sandbox-first, and evidence-backed.'}
+"""
+
+    def _project_goal_brief(self, request: GovernedProjectRequest, profile: dict[str, object]) -> str:
+        return f"""# Project Brief
+
+## Project
+
+- Name: {request.name}
+- Kind: {request.kind}
+- Domain: {profile['label']}
+- Owner: {request.owner or 'Unassigned'}
+
+## Purpose
+
+{request.purpose}
+
+## Constraints
+
+{request.constraints or 'Stay governed, sandbox-only, and preserve isolated runs plus reviewable outcomes.'}
+"""
+
+    def _run_goal_brief(self, request: GovernedRunRequest, profile: dict[str, object], run_key: str) -> str:
+        return f"""# Run Brief
+
+## Run
+
+- Key: {run_key}
+- Domain: {profile['label']}
+- Owner: {request.owner or 'Unassigned'}
+
+## Goal
+
+{request.goal}
+
+## Constraints
+
+{request.constraints or 'Stay governed, sandbox-only, and evidence-backed.'}
+"""
+
+    def _project_registry_markdown(self, request: GovernedProjectRequest, profile: dict[str, object]) -> str:
+        return f"""# Project Registry
+
+## Canonical Model
+
+- Project: {request.name}
+- Kind: {request.kind}
+- Domain: {profile['label']}
+- Purpose: {request.purpose}
+
+## Lifecycle
+
+- Missions define governed requests against the project.
+- Runs are created under `workspace/runs/` and must remain isolated from one another.
+- Outcomes are stored under `workspace/outcomes/` and promoted explicitly after review.
+"""
+
+    def _outcomes_readme(self) -> str:
+        return """# Outcomes
+
+Store promoted or draft outcomes here. Do not overwrite prior outcomes in place. Add new outcome folders or files for each meaningful result.
+"""
+
+    def _runs_readme(self) -> str:
+        return """# Runs
+
+Each mission should receive a fresh run workspace here. New work should not overwrite a previous run.
 """
 
     def _governance_check(self) -> str:

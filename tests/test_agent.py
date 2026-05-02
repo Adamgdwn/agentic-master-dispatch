@@ -88,6 +88,7 @@ class AgentTests(unittest.TestCase):
                 "lab-host-coding-sandbox",
             )
             self.assertIn("recommended_instruction_pack", task["report"]["explainability"])
+            self.assertIn("objective_profile", task["report"]["explainability"])
 
 
 if __name__ == "__main__":

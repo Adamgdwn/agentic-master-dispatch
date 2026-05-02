@@ -173,6 +173,76 @@ class RequestHandler(SimpleHTTPRequestHandler):
         run["stored_results"] = APP.storage.list_sandbox_benchmark_runs(run_group=run["run_group"], limit=20)
         return run, HTTPStatus.CREATED
 
+    def _compose_exploration_constraints(self, body: dict[str, object]) -> str:
+        sections = [
+            ("Hard Constraints", str(body.get("hard_constraints", "")).strip()),
+            ("Available Environment", str(body.get("available_environment", "")).strip()),
+            ("Evidence Requirements", str(body.get("evidence_requirements", "")).strip()),
+            (
+                "Operator Hunches",
+                str(body.get("operator_hunches", "")).strip(),
+            ),
+            (
+                "Disallowed Assumptions",
+                str(body.get("disallowed_assumptions", "")).strip(),
+            ),
+        ]
+        lines: list[str] = []
+        for title, content in sections:
+            if not content:
+                continue
+            if title == "Operator Hunches":
+                content = (
+                    "Treat these as operator hypotheses for exploration, not as the scoring rule unless later approved.\n"
+                    + content
+                )
+            lines.append(f"{title}:")
+            lines.append(content)
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    def _exploration_preview(self, body: dict[str, object]) -> tuple[dict[str, object], int]:
+        goal = str(body.get("goal", "")).strip()
+        if not goal:
+            return {"error": "Goal is required"}, HTTPStatus.BAD_REQUEST
+        domain = str(body.get("domain", "coding-optimization")).strip() or "coding-optimization"
+        if domain not in DOMAIN_PROFILES:
+            return {"error": "Unknown domain"}, HTTPStatus.BAD_REQUEST
+
+        structured_constraints = self._compose_exploration_constraints(body)
+        objective_profile = APP.missions.coding_loop.preview_objective_profile(
+            goal,
+            structured_constraints,
+            host_profile=APP.lab_host_profile(),
+        )
+        unresolved = []
+        if not str(body.get("hard_constraints", "")).strip():
+            unresolved.append("No hard constraints were provided yet.")
+        if not str(body.get("evidence_requirements", "")).strip():
+            unresolved.append("Evidence requirements are still open-ended.")
+        if not str(body.get("disallowed_assumptions", "")).strip():
+            unresolved.append("Disallowed assumptions are not yet explicit.")
+
+        return {
+            "preview": {
+                "domain": domain,
+                "objective_profile": objective_profile,
+                "mission_packet": {
+                    "project_name": str(body.get("project_name", "")).strip(),
+                    "project_kind": str(body.get("project_kind", "project")).strip() or "project",
+                    "goal": goal,
+                    "domain": domain,
+                    "constraints": structured_constraints,
+                },
+                "bias_controls": [
+                    "Keep operator hunches separate from the core mission statement.",
+                    "Require measurable dimensions before claiming one option is best.",
+                    "Treat unresolved assumptions as review items, not silent defaults.",
+                ],
+                "unresolved_questions": unresolved,
+            }
+        }, HTTPStatus.OK
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/state":
@@ -194,6 +264,9 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     "memories": APP.storage.list_all_memories(),
                     "feedback": APP.storage.list_feedback(),
                     "learning_runs": APP.storage.list_learning_runs(),
+                    "projects": APP.storage.list_projects(),
+                    "runs": APP.storage.list_runs(limit=50),
+                    "outcomes": APP.storage.list_outcomes(limit=50),
                     "benchmark_evaluations": APP.storage.list_benchmark_evaluations(limit=20),
                     "sandbox_benchmark_runs": APP.storage.list_sandbox_benchmark_runs(limit=20),
                     "lab_host": APP.lab_host_profile(),
@@ -279,11 +352,17 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     constraints=body.get("constraints", "").strip(),
                     owner=body.get("owner", "").strip(),
                     mission_name=body.get("mission_name", "").strip(),
+                    project_name=body.get("project_name", "").strip(),
+                    project_kind=body.get("project_kind", "project").strip() or "project",
                     priority=body.get("priority", "balanced").strip() or "balanced",
                     requested_connectors=body.get("requested_connectors", []),
                 )
             )
             self._send_json({"mission": mission}, status=HTTPStatus.CREATED)
+            return
+        if parsed.path == "/api/exploration/preview":
+            payload, status = self._exploration_preview(self._read_json())
+            self._send_json(payload, status=status)
             return
         if parsed.path == "/api/children":
             body = self._read_json()
